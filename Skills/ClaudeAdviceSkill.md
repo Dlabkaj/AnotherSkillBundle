@@ -10,7 +10,7 @@ Scan the last user message + your own planned next action against the list below
 
 Full details, examples, and corrective patterns live in the linked wiki page. This file is the trigger checklist only.
 
-> `{{CLAUDE_EXPERIENCE_ROOT}}` resolves from `skillSettings.json` (default: `Wiki/ClaudeExperience` inside WizzardBelt, or wherever the consuming project copied it). See repo `README.md`.
+> `{{CLAUDE_EXPERIENCE_ROOT}}` resolves from `skillSettings.json` (default: `Wiki/ClaudeExperience` inside AnotherSkillBundle, or wherever the consuming project copied it). See repo `README.md`.
 
 ## Anti-pattern checklist
 

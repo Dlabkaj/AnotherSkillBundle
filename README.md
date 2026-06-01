@@ -1,4 +1,4 @@
-# WizzardBelt
+# AnotherSkillBundle
 
 Reusable skill belt for Claude Code projects. Pull this repo into any project that wants the same automation patterns — autonomous research, long-term task orchestration, anti-pattern advice — without re-deriving them.
 
@@ -24,7 +24,7 @@ Reusable skill belt for Claude Code projects. Pull this repo into any project th
 
 ## Using these skills in a project
 
-1. **Clone** WizzardBelt into your project. Either:
+1. **Clone** AnotherSkillBundle into your project. Either:
    - Copy `Skills/` and `Wiki/ClaudeExperience/` into your project root, or
    - Add this repo as a git submodule and symlink / merge the folders.
 
