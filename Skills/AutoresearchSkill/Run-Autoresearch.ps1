@@ -9,11 +9,26 @@
 # Optional:
 #   -MaxPhaseTransitions 30   safety ceiling on phase flips (default 30)
 #   -ClaudeCmd claude         override CLI binary
+#   -FetchModel  haiku        model for FETCH phase  (empty = CLI default)
+#   -IngestModel opus         model for INGEST phase (empty = CLI default)
+#   -ReviewModel opus         model for REVIEW phase (empty = CLI default)
+#   -DigestModel haiku        optional Haiku pre-digest pass that condenses raw
+#                             files before INGEST (cuts ingest input tokens).
+#                             Empty = no pre-digest (default).
+#   -LogTokens                log per-session token usage to iter-log.txt
+# Budget-tuned example: -FetchModel haiku -DigestModel haiku -IngestModel sonnet -ReviewModel opus
+# Models accept CLI aliases (haiku|sonnet|opus) or full ids.
+# Token logging can also be enabled in the brief via a `LOG_TOKENS: true` line in task.md.
 
 param(
     [Parameter(Mandatory=$true)][string]$TaskDir,
     [int]$MaxPhaseTransitions = 30,
-    [string]$ClaudeCmd = "claude"
+    [string]$ClaudeCmd = "claude",
+    [string]$FetchModel  = "",
+    [string]$IngestModel = "",
+    [string]$ReviewModel = "",
+    [string]$DigestModel = "",
+    [switch]$LogTokens
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -30,6 +45,9 @@ $logFile      = Join-Path $absTaskDir "iter-log.txt"
 $taskMd       = Join-Path $absTaskDir "task.md"
 
 if (-not (Test-Path $progressFile)) { Write-Host "ERROR: progress.md missing in $absTaskDir"; exit 1 }
+
+# Token logging: CLI switch OR `LOG_TOKENS: true` in task.md.
+$logTokens = $LogTokens -or ((Get-TaskField $taskMd "LOG_TOKENS" "false").ToLower() -eq "true")
 
 $scrapeRunner = Join-Path $PSScriptRoot "..\SourceScrapeSkill\Run-SourceScrape.ps1"
 $ingestRunner = Join-Path $PSScriptRoot "..\IngestionSkill\Run-Ingestion.ps1"
@@ -80,15 +98,21 @@ for ($flip = 1; $flip -le $MaxPhaseTransitions; $flip++) {
     Write-Host "=== [$stamp] Dispatcher flip $flip / $MaxPhaseTransitions  [PHASE: $phase] ==="
 
     switch ($phase) {
-        "FETCH"  { $runner = $scrapeRunner }
-        "INGEST" { $runner = $ingestRunner }
-        "REVIEW" { $runner = $reviewRunner }
+        "FETCH"  { $runner = $scrapeRunner; $phaseModel = $FetchModel }
+        "INGEST" { $runner = $ingestRunner; $phaseModel = $IngestModel }
+        "REVIEW" { $runner = $reviewRunner; $phaseModel = $ReviewModel }
         default  { Write-Host "Unknown PHASE: $phase -- exiting."; break }
     }
 
     if (-not (Test-Path $runner)) { Write-Host "ERROR: sub-runner missing: $runner"; break }
 
-    & $runner -TaskDir $absTaskDir -ClaudeCmd $ClaudeCmd
+    if ($phaseModel) { Write-Host "  Model:       $phaseModel" }
+    if ($phase -eq "FETCH" -and $DigestModel) {
+        Write-Host "  Digest:      $DigestModel (pre-digest before INGEST)"
+        & $runner -TaskDir $absTaskDir -ClaudeCmd $ClaudeCmd -Model $phaseModel -DigestModel $DigestModel -LogTokens:$logTokens
+    } else {
+        & $runner -TaskDir $absTaskDir -ClaudeCmd $ClaudeCmd -Model $phaseModel -LogTokens:$logTokens
+    }
     $subExit = $LASTEXITCODE
 
     if ($subExit -eq 42) {

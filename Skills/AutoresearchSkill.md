@@ -64,6 +64,7 @@ Create `{{RAW_ROOT}}/<topic-slug>/` (slug = kebab-case topic):
   HARD_CAP: <N>
   AUTHORITATIVE: <list or none>
   ON_LIMIT: stop|relaunch
+  LOG_TOKENS: true|false   # optional, default false — log per-session token usage to iter-log.txt
   ```
 - **`progress.md`** — live state, this exact format:
   ```
@@ -157,5 +158,5 @@ python Skills/SharedScripts/research_state.py update <task_dir> KEY=VAL ...   # 
 python Skills/SharedScripts/research_state.py check-stop <task_dir>     # JSON: {stop, reason}
 ```
 
-Valid `STATUS` values: `READY_FETCH`, `READY_INGEST`, `READY_REVIEW`, `STOP_BLOCKED`, `STOP_DIMINISHING`, `COMPLETE`.
+Valid `STATUS` values: `READY_FETCH`, `READY_INGEST`, `READY_REVIEW`, `STOP_BLOCKED`, `STOP_DIMINISHING`, `STOP_NEEDS_WORK`, `COMPLETE`.
 Valid `PHASE` values: `FETCH`, `INGEST`, `REVIEW`.

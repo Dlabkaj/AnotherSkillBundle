@@ -14,6 +14,9 @@ param(
     [int]$MaxIterations = 30,
     [int]$DelaySeconds = 5,
     [string]$ClaudeCmd = "claude",
+    [string]$Model = "",
+    [string]$DigestModel = "",
+    [switch]$LogTokens,
     [switch]$NoPreDownload
 )
 
@@ -187,6 +190,37 @@ function Get-PendingCount {
     return $count
 }
 
+# ── Helper: Haiku pre-digest pass (token reduction before INGEST) ─────────────
+# Condenses each fetched raw/<slug>.txt to focus-relevant content using a cheap
+# model, so the (expensive) INGEST model reads far fewer input tokens per source.
+# Keep-by-default: strips chrome only, preserves facts/numbers/citations. The
+# original is backed up to raw/<slug>.orig.txt so REVIEW can fall back if a fact
+# was over-trimmed. Idempotent: a file that already has a .orig.txt sibling is
+# treated as already digested and skipped. Returns @{ LimitHit = $bool }.
+function Invoke-RawDigest {
+    param(
+        [string]$RawDir,
+        [string]$TaskMd,
+        [string]$LogFile,
+        [string]$DigestModel,
+        [string]$ClaudeCmd,
+        [bool]$LogTokens
+    )
+    if (-not (Test-Path $RawDir)) { return @{ LimitHit = $false } }
+    $focus = Get-TaskField $TaskMd "RESEARCH_FOCUS" ""
+    $files = Get-ChildItem -Path $RawDir -Filter *.txt -File |
+             Where-Object { $_.Name -notmatch '\.orig\.txt$' }
+    foreach ($f in $files) {
+        $orig = Join-Path $RawDir ($f.BaseName + ".orig.txt")
+        if (Test-Path $orig) { continue }  # already digested
+        Write-Host "  [DIGEST] $($f.Name)"
+        $prompt = "Mode: WORKER. Token-reduction pre-digest of ONE file. Read: $($f.FullName) (it starts with a SOURCE_URL line). Rewrite it as a condensed digest that KEEPS: the SOURCE_URL line verbatim, every number/date/price/measurement, named entities, direct claims, and anything relevant to RESEARCH_FOCUS: '$focus'. STRIP only: navigation, menus, cookie/consent text, ads, footers, repeated boilerplate, unrelated article links. Do NOT summarize away facts -- keep them, just remove the chrome. Steps: (1) if $orig does not already exist, copy $($f.FullName) to $orig; (2) overwrite $($f.FullName) with the digest. Touch no other files. No user prompts."
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $LogFile -Model $DigestModel -LogTokens:$LogTokens
+        if ($res.LimitHit) { return @{ LimitHit = $true } }
+    }
+    return @{ LimitHit = $false }
+}
+
 # ── Inline mode: just fetch the provided URLs and exit ────────────────────────
 if ($Urls -and $Urls.Count -gt 0) {
     if (-not $OutDir) { Write-Host "ERROR: -OutDir required for inline mode"; exit 1 }
@@ -236,6 +270,17 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
 
         $remaining = Get-PendingCount $candidatesFile
         if ($remaining -eq 0) {
+            if ($DigestModel) {
+                Write-Host "  Pre-digesting raw files with '$DigestModel' (token reduction before INGEST)..."
+                $taskMdPath = Join-Path $absTaskDir "task.md"
+                $dg = Invoke-RawDigest -RawDir $rawDir -TaskMd $taskMdPath -LogFile $logFile `
+                        -DigestModel $DigestModel -ClaudeCmd $ClaudeCmd -LogTokens $LogTokens
+                if ($dg.LimitHit) {
+                    Write-Host $UsageLimitSentinel
+                    $UsageLimitSentinel | Out-File -FilePath $logFile -Append -Encoding utf8
+                    exit 42
+                }
+            }
             Write-Host "  All candidates fetched. Transitioning FETCH -> INGEST."
             Set-ProgressPhase -ProgressFile $progressFile -Phase "INGEST" -Status "READY_INGEST"
             "=== [$stamp] SourceScrape iter $i [PS pre-download: FETCH->INGEST transition] ===" |
@@ -250,7 +295,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     "`n=== [$stamp] SourceScrape iter $i ===" | Out-File -FilePath $logFile -Append -Encoding utf8
 
     try {
-        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -LogTokens:$LogTokens
         if ($res.LimitHit) {
             Write-Host $UsageLimitSentinel
             $UsageLimitSentinel | Out-File -FilePath $logFile -Append -Encoding utf8

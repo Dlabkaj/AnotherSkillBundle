@@ -34,13 +34,14 @@ Goal: one source at a time, deep fact extraction, wiki integration, verification
 4. **`next_candidate`** from status JSON is the current source to ingest.
 5. **Ingest — atomic unit. Never mark `done` unless every step below completed** (AI judgment):
    - Read the raw file from `next_candidate.raw` path (or original path for pre-existing `{{RAW_ROOT}}/` files).
+   - **Per-turn payload discipline (cost control):** open ONLY (a) this source's raw file and (b) the single target sub-page you will edit. Do NOT read other raw files or other wiki pages to cross-reference — that is REVIEW's job. Re-reading the whole wiki every turn is what drives cache-read cost; keep per-turn context flat across the session.
    - Use `RESEARCH_FOCUS` from `task.json` field in status output to guide extraction. Prioritize facts and content that serve the stated focus. Spend proportionally more depth on focus-relevant material.
    - If content is irrelevant / garbage after reading → `mark <task_dir> <url> skipped-ingest` → step 6.
    - Extract facts, integrate into wiki per the project's wiki conventions (page format, citations, wiki-links). All output in topic's chosen language.
    - **Citations must use the original URL**, not the raw .txt filename. The URL is in `next_candidate.url` and on the `SOURCE_URL:` line at the top of each raw file. Raw txt files are temporary and will be deleted.
-   - **Conflict rule**: if a new fact contradicts something already written in the wiki, **do not overwrite**. Record both versions inline with their sources and flag with `⚠️ CONFLICT:`. Format: `⚠️ CONFLICT: Source A says X (source: A); Source B says Y (source: B). Needs resolution.`
-   - **Verification pass — required before marking `done`**: for every crisp factual atom added (years, formulas, type localities, etymologies, namesakes, "first/largest/only" superlatives) → cross-check against ≥2 independent sources. Already-ingested raw files in this task count as a second source. If second source unavailable or blocked, mark claim `*(needs second source)*` inline.
-   - Update `{{WIKI_ROOT}}/Index.md` and `{{WIKI_ROOT}}/Log.md`.
+   - **Conflict rule (local only)**: if a new fact contradicts something already on **the sub-page you are editing**, do not overwrite — record both versions inline with their sources and flag `⚠️ CONFLICT: Source A says X (source: A); Source B says Y (source: B). Needs resolution.` Do NOT scan other wiki pages hunting for contradictions; cross-page conflicts are REVIEW's job.
+   - **No cross-source verification during ingest.** Cross-checking forces re-reading other sources/pages and burns turns (the main cost driver). Extract only from THIS source. Tag each crisp factual atom (years, formulas, type localities, etymologies, namesakes, "first/largest/only" superlatives) with `*(unverified)*`. The REVIEW phase cross-checks every tagged atom against the completed wiki + raw files in one pass. Exception: if THIS source itself states a second corroboration, you may drop the tag. (Orchestrated mode only — inline mode has no REVIEW; see Inline mode below.)
+   - Defer `{{WIKI_ROOT}}/Index.md` and `{{WIKI_ROOT}}/Log.md` updates to **once at session end**, not per source — re-opening them every source re-reads context.
    - Measure `chars_added_this_scrape` (sum of lines added across wiki files).
    - `update <task_dir> SOURCES_INGESTED+=1 RECENT_EDIT_CHARS+=<chars> LAST_EDIT=<ISO timestamp> LAST_VERIFY=<short note>`
    - `mark <task_dir> <url> done`
@@ -98,9 +99,11 @@ Update root `{{WIKI_ROOT}}/Index.md` to link new folder.
 
 Caller supplies `raw_files=[...]` + `wiki_target={{WIKI_ROOT}}/Foo/` + `research_focus="..."` + `language=English|Czech`.
 
+Inline mode has **no REVIEW phase**, so do the cross-source verification pass inline (don't defer it / don't leave `*(unverified)*` tags dangling).
+
 For each file in order:
 1. Read it. If first line is `SOURCE_URL: <url>`, that's the citation source.
-2. Extract facts per `research_focus`, write into `wiki_target` following the same rules above (citations, conflicts, verification pass).
+2. Extract facts per `research_focus`, write into `wiki_target` following the same rules above (citations, conflicts), but cross-check crisp atoms against ≥2 sources here rather than deferring.
 3. Print a one-line summary of chars added per file.
 
 No `progress.md` writes. No state script. No diminishing-returns stop — caller decides when enough is enough by what they passed in.

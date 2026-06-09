@@ -257,16 +257,25 @@ def cmd_update(task_dir, updates):
         if "+=" in item:
             k, v = item.split("+=", 1)
             k, v = k.strip(), v.strip()
-            lst = progress.get(k, [])
-            if not isinstance(lst, list):
-                lst = []
-            try:
-                lst.append(int(v))
-            except ValueError:
-                lst.append(v)
-            if k == "RECENT_EDIT_CHARS":
-                lst = lst[-5:]
-            progress[k] = lst
+            if k in INT_KEYS:
+                cur = progress.get(k, 0)
+                if not isinstance(cur, int):
+                    cur = 0
+                try:
+                    progress[k] = cur + int(v)
+                except ValueError:
+                    progress[k] = cur
+            else:
+                lst = progress.get(k, [])
+                if not isinstance(lst, list):
+                    lst = []
+                try:
+                    lst.append(int(v))
+                except ValueError:
+                    lst.append(v)
+                if k == "RECENT_EDIT_CHARS":
+                    lst = lst[-5:]
+                progress[k] = lst
         elif "=" in item:
             k, v = item.split("=", 1)
             k, v = k.strip(), v.strip()

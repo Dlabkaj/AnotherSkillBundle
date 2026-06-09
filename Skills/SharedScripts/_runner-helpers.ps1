@@ -175,20 +175,57 @@ function Invoke-UsageLimitHandler {
 }
 
 # Invoke claude -p with WORKER prompt; returns hashtable @{ Output; LimitHit }
+# -Model:     optional CLI model alias/id (haiku|sonnet|opus|<full-id>). Empty = CLI default.
+# -LogTokens: when set, run with --output-format json and emit a TOKENS: line
+#             (in / cache / out / cost) to host + LogFile. Off by default.
 function Invoke-WorkerSession {
     param(
         [string]$ClaudeCmd,
         [string]$Prompt,
-        [string]$LogFile
+        [string]$LogFile,
+        [string]$Model = "",
+        [switch]$LogTokens
     )
-    $output = & $ClaudeCmd -p --dangerously-skip-permissions $Prompt 2>&1
-    $output | ForEach-Object { Write-Host $_ }
-    if ($LogFile) {
-        $output | Out-File -FilePath $LogFile -Append -Encoding utf8
+    $cmdArgs = @('-p')
+    if ($Model)     { $cmdArgs += @('--model', $Model) }
+    if ($LogTokens) { $cmdArgs += @('--output-format', 'json') }
+    $cmdArgs += '--dangerously-skip-permissions'
+    $cmdArgs += $Prompt
+
+    # Pipe closed stdin so the CLI does not wait 3s for optional piped input.
+    # That "no stdin data received" warning is emitted on stderr and, merged
+    # via 2>&1, would otherwise prepend non-JSON text to the result blob.
+    $output  = $null | & $ClaudeCmd @cmdArgs 2>&1
+    $rawText = ($output -join "`n")
+    $text    = $rawText
+
+    # With --output-format json claude returns a single JSON blob. Pull the result
+    # text back out for display/limit-detection and log a usage line. Limit
+    # detection always runs against the raw output so a non-JSON limit message
+    # (CLI emits plain text on usage-limit) is still caught.
+    if ($LogTokens) {
+        $tokenLine = "TOKENS: (parse failed -- output not JSON)"
+        # Isolate the result JSON object: any stderr noise merged via 2>&1
+        # lands before it, so parse from the first result marker onward.
+        $jsonText = $rawText
+        $idx = $rawText.IndexOf('{"type":"result"')
+        if ($idx -ge 0) { $jsonText = $rawText.Substring($idx) }
+        try {
+            $j = $jsonText | ConvertFrom-Json
+            if ($null -ne $j.result) { $text = [string]$j.result }
+            $u = $j.usage
+            $tokenLine = "TOKENS: in=$([int]$u.input_tokens) cache_read=$([int]$u.cache_read_input_tokens) cache_create=$([int]$u.cache_creation_input_tokens) out=$([int]$u.output_tokens) cost_usd=$($j.total_cost_usd) turns=$($j.num_turns)"
+        } catch { }
+        Write-Host $tokenLine
+        if ($LogFile) { $tokenLine | Out-File -FilePath $LogFile -Append -Encoding utf8 }
     }
-    $text = ($output -join "`n")
+
+    $text -split "`n" | ForEach-Object { Write-Host $_ }
+    if ($LogFile) {
+        $text | Out-File -FilePath $LogFile -Append -Encoding utf8
+    }
     return @{
         Output   = $text
-        LimitHit = (Test-UsageLimitHit $text)
+        LimitHit = (Test-UsageLimitHit $rawText)
     }
 }

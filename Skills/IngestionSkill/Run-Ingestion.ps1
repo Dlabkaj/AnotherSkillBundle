@@ -15,7 +15,9 @@ param(
     [string]$ResearchFocus,
     [int]$MaxIterations = 30,
     [int]$DelaySeconds = 5,
-    [string]$ClaudeCmd = "claude"
+    [string]$ClaudeCmd = "claude",
+    [string]$Model = "",
+    [switch]$LogTokens
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -44,7 +46,7 @@ if ($RawFiles -and $RawFiles.Count -gt 0) {
     $prompt = "Mode: WORKER. Follow IngestionSkill protocol (inline mode). Ingest these raw files in order: $filesJoined. Wiki target: $WikiTarget. Language: $Language. Research focus: $ResearchFocus. No progress.md, no state script. Apply verification pass and conflict rules. Print one-line chars-added summary per file. No user prompts."
 
     Write-Host "Run-Ingestion inline mode: $($RawFiles.Count) files -> $WikiTarget"
-    $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $null
+    $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $null -Model $Model -LogTokens:$LogTokens
     if ($res.LimitHit) { Write-Host $UsageLimitSentinel; exit 42 }
     exit 0
 }
@@ -85,14 +87,14 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         Write-Host "  No next_candidate (counts: $($preState.candidate_counts | ConvertTo-Json -Compress))"
     }
 
-    $prompt = "Continue ingestion in $absTaskDir. Mode: WORKER. Follow IngestionSkill protocol (INGEST loop). No user prompts. Read raw files for next_candidate from research_state.py status, extract facts into wiki, run verification pass, mark done. Stop when context budget hit or PHASE changes."
+    $prompt = "Continue ingestion in $absTaskDir. Mode: WORKER. Follow IngestionSkill protocol (INGEST loop). No user prompts. Read ONLY the next_candidate raw file (from research_state.py status) plus the single target sub-page; do NOT read other raw files or wiki pages. Extract facts from this source only, tag crisp atoms *(unverified)* (NO cross-source checking -- REVIEW does that), apply local conflict rule, mark done. Stop when context budget hit or PHASE changes."
 
     "`n=== [$stamp] Ingestion iter $i ===" | Out-File -FilePath $logFile -Append -Encoding utf8
     Write-Host "  --- worker session ---"
 
     $iterErr = $null
     try {
-        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -LogTokens:$LogTokens
         if ($res.LimitHit) {
             Write-Host "  --- worker session end (LIMIT HIT) ---"
             Write-Host $UsageLimitSentinel
