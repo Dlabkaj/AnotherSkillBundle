@@ -16,6 +16,7 @@ Map of skills + scripts and how they wire together. Keep this file in sync when 
 | [IngestionReviewSkill.md](IngestionReviewSkill.md) | One-shot cross-wiki consistency pass after ingestion. Fix citation errors, flag conflicts/single-source superlatives. | WORKER (REVIEW), inline |
 | [LongTermTaskSkill.md](LongTermTaskSkill.md) | Goals too big for one session. Decompose → partial tasks → step-driven WORKER subprocesses. Reference docs (file formats, state-script API, runner internals) in sibling [details.md](LongTermTaskSkill/details.md). | CREATE, WORKER, MANUAL |
 | [YouTubeTranscriptSkill.md](YouTubeTranscriptSkill.md) | Fetch YouTube transcripts in autoresearch-compatible raw format. | standalone |
+| [LibrarianSkill.md](LibrarianSkill.md) | Standing wiki maintenance — structural lint (orphans, broken links, format, Index/Log sync), flag-only second-source audit, raw/ cleanup of COMPLETE tasks. Used by the Intern agent. | inline, WORKER |
 | [ClaudeAdviceSkill.md](ClaudeAdviceSkill.md) | Always-active. Scans turn for anti-patterns (from `{{CLAUDE_EXPERIENCE_ROOT}}/AntiPatterns/`), surfaces one-line nudge with wiki link. | always-active |
 
 ---

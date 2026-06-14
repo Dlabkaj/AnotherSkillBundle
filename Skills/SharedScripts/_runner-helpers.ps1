@@ -175,27 +175,55 @@ function Invoke-UsageLimitHandler {
 }
 
 # Invoke claude -p with WORKER prompt; returns hashtable @{ Output; LimitHit }
-# -Model:     optional CLI model alias/id (haiku|sonnet|opus|<full-id>). Empty = CLI default.
-# -LogTokens: when set, run with --output-format json and emit a TOKENS: line
-#             (in / cache / out / cost) to host + LogFile. Off by default.
+# -Model:        optional CLI model alias/id (haiku|sonnet|opus|<full-id>). Empty = CLI default.
+# -Agent:        optional subagent name; when set, runs the session as that agent
+#                (--agent <name>). Agent frontmatter supplies system prompt + tools;
+#                its model is used only when -Model is empty (CLI -Model wins).
+# -AllowedTools: optional permission allowlist as an ARRAY of rules, one rule per
+#                element (e.g. @('Read','Write(MemoryVault/Raw/**)','Bash(python foo.py:*)')).
+#                Each element is passed as its own CLI arg so rules with internal
+#                spaces (Bash(python path:*)) are not split by the parser. When set,
+#                the session runs under --permission-mode <PermissionMode> with this
+#                allowlist INSTEAD of --dangerously-skip-permissions. When empty, the
+#                legacy skip-permissions path is used (LongTermTask, inline callers).
+# -PermissionMode: permission mode paired with -AllowedTools. Default dontAsk
+#                (deny-and-continue: unlisted tool calls are denied, run keeps going).
+# -LogTokens:    when set, run with --output-format json and emit a TOKENS: line
+#                (in / cache / out / cost) to host + LogFile. Off by default.
 function Invoke-WorkerSession {
     param(
         [string]$ClaudeCmd,
         [string]$Prompt,
         [string]$LogFile,
         [string]$Model = "",
+        [string]$Agent = "",
+        [string[]]$AllowedTools = @(),
+        [string]$PermissionMode = "dontAsk",
         [switch]$LogTokens
     )
     $cmdArgs = @('-p')
-    if ($Model)     { $cmdArgs += @('--model', $Model) }
+    if ($Agent) { $cmdArgs += @('--agent', $Agent) }
+    if ($Model) { $cmdArgs += @('--model', $Model) }
+    if ($AllowedTools -and $AllowedTools.Count -gt 0) {
+        # Hardened path: least-privilege allowlist + deny-and-continue mode.
+        # Each rule is its own arg (the --allowedTools <tools...> variadic collects
+        # them) so a rule with internal spaces -- e.g. Bash(python path:*) -- is not
+        # split by the CLI parser. --output-format below stops the variadic; the
+        # prompt is on stdin so it can never be swallowed as a tool name.
+        $cmdArgs += @('--permission-mode', $PermissionMode)
+        $cmdArgs += '--allowedTools'
+        $cmdArgs += $AllowedTools
+    } else {
+        # Legacy path: full access (general autonomy / inline callers).
+        $cmdArgs += '--dangerously-skip-permissions'
+    }
     if ($LogTokens) { $cmdArgs += @('--output-format', 'json') }
-    $cmdArgs += '--dangerously-skip-permissions'
-    $cmdArgs += $Prompt
 
-    # Pipe closed stdin so the CLI does not wait 3s for optional piped input.
-    # That "no stdin data received" warning is emitted on stderr and, merged
-    # via 2>&1, would otherwise prepend non-JSON text to the result blob.
-    $output  = $null | & $ClaudeCmd @cmdArgs 2>&1
+    # Prompt goes via stdin, NOT as a positional arg. --allowedTools is variadic
+    # and would greedily eat a trailing positional prompt (commander <tools...>),
+    # producing "Input must be provided..." So feed the prompt through stdin -- the
+    # CLI reads --print input from stdin when no prompt argument is present.
+    $output  = $Prompt | & $ClaudeCmd @cmdArgs 2>&1
     $rawText = ($output -join "`n")
     $text    = $rawText
 

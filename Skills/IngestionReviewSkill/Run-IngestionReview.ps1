@@ -55,6 +55,12 @@ if ($phase -ne "REVIEW") { Write-Host "PHASE=$phase -- not REVIEW, exiting."; ex
 
 $stateScript = Join-Path $PSScriptRoot "..\SharedScripts\research_state.py"
 
+# Hardened-worker allowlist (REVIEW). Reads raw + wiki, fixes wiki in place, writes
+# review_notes.md into the task dir (under MemoryVault/Raw), drives state. No WebFetch,
+# no arbitrary Bash. State script scoped + injected into the prompt.
+$StateScriptRel     = "Skills/AnotherSkillBundle/Skills/SharedScripts/research_state.py"
+$ReviewAllowedTools = @('Read','Glob','Write(MemoryVault/Raw/**)','Edit(MemoryVault/Wiki/**)','Edit(MemoryVault/Raw/**)',"Bash(python $StateScriptRel`:*)")
+
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Host "=== [$stamp] IngestionReview (multi-pass, max $MaxPasses) ==="
 
@@ -70,12 +76,12 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
     Write-Host "=== [$stamp] REVIEW pass $pass / $MaxPasses ==="
     "`n=== [$stamp] REVIEW pass $pass / $MaxPasses ===" | Out-File -FilePath $logFile -Append -Encoding utf8
 
-    $prompt = "Run wiki review PASS in $absTaskDir. Mode: WORKER. Follow IngestionReviewSkill protocol (orchestrated multi-pass). This is pass $pass of max $MaxPasses. Read WIKI_PAGES_TOUCHED from progress.md, apply the full checklist INCLUDING deferred verification of *(unverified)* atoms, fix issues in place. Do NOT set STATUS -- the runner decides. Refresh review_notes.md, then print EXACTLY one final line: REVIEW_PASS_RESULT: high=<count> low=<count> fixed=<count> note=<short>. Count only issues you found and acted on THIS pass (high = conflicts/contradictions/bad citations/fabrications; low = needs-second-source/missing cross-link/minor format). No user prompts."
+    $prompt = "Run wiki review PASS in $absTaskDir. Mode: WORKER. Follow IngestionReviewSkill protocol (orchestrated multi-pass). This is pass $pass of max $MaxPasses. Read WIKI_PAGES_TOUCHED from progress.md, apply the full checklist INCLUDING deferred verification of *(unverified)* atoms, fix issues in place. Do NOT set STATUS -- the runner decides. Refresh review_notes.md, then print EXACTLY one final line: REVIEW_PASS_RESULT: high=<count> low=<count> fixed=<count> note=<short>. Count only issues you found and acted on THIS pass (high = conflicts/contradictions/bad citations/fabrications; low = needs-second-source/missing cross-link/minor format). No user prompts. Run the state script via: python $StateScriptRel <cmd> ..."
 
     $passHigh = $null
     $passLow  = $null
     try {
-        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -LogTokens:$LogTokens
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -AllowedTools $ReviewAllowedTools -LogTokens:$LogTokens
         if ($res.LimitHit) {
             Write-Host $UsageLimitSentinel
             $UsageLimitSentinel | Out-File -FilePath $logFile -Append -Encoding utf8

@@ -17,6 +17,7 @@ param(
     [int]$DelaySeconds = 5,
     [string]$ClaudeCmd = "claude",
     [string]$Model = "",
+    [string]$Agent = "researcher",
     [switch]$LogTokens
 )
 
@@ -61,6 +62,11 @@ $logFile      = Join-Path $absTaskDir "iter-log.txt"
 
 if (-not (Test-Path $progressFile)) { Write-Host "ERROR: progress.md missing in $absTaskDir"; exit 1 }
 
+# Hardened-worker allowlist (INGEST). Reads raw, writes wiki, drives state. No
+# WebFetch (Intern fetches), no arbitrary Bash. State script scoped + injected.
+$StateScriptRel     = "Skills/AnotherSkillBundle/Skills/SharedScripts/research_state.py"
+$IngestAllowedTools = @('Read','Glob','Write(MemoryVault/Wiki/**)','Edit(MemoryVault/Wiki/**)',"Bash(python $StateScriptRel`:*)")
+
 Write-Host "Run-Ingestion starting. TaskDir: $absTaskDir"
 
 for ($i = 1; $i -le $MaxIterations; $i++) {
@@ -87,14 +93,14 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         Write-Host "  No next_candidate (counts: $($preState.candidate_counts | ConvertTo-Json -Compress))"
     }
 
-    $prompt = "Continue ingestion in $absTaskDir. Mode: WORKER. Follow IngestionSkill protocol (INGEST loop). No user prompts. Read ONLY the next_candidate raw file (from research_state.py status) plus the single target sub-page; do NOT read other raw files or wiki pages. Extract facts from this source only, tag crisp atoms *(unverified)* (NO cross-source checking -- REVIEW does that), apply local conflict rule, mark done. Stop when context budget hit or PHASE changes."
+    $prompt = "Continue ingestion in $absTaskDir. Mode: WORKER. Follow IngestionSkill protocol (INGEST loop). No user prompts. Read ONLY the next_candidate raw file (from research_state.py status) plus the single target sub-page; do NOT read other raw files or wiki pages. Extract facts from this source only, tag crisp atoms *(unverified)* (NO cross-source checking -- REVIEW does that), apply local conflict rule, mark done. Stop when context budget hit or PHASE changes. Run the state script via: python $StateScriptRel <cmd> ..."
 
     "`n=== [$stamp] Ingestion iter $i ===" | Out-File -FilePath $logFile -Append -Encoding utf8
     Write-Host "  --- worker session ---"
 
     $iterErr = $null
     try {
-        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -LogTokens:$LogTokens
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -Agent $Agent -AllowedTools $IngestAllowedTools -LogTokens:$LogTokens
         if ($res.LimitHit) {
             Write-Host "  --- worker session end (LIMIT HIT) ---"
             Write-Host $UsageLimitSentinel

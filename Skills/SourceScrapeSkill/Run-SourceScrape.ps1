@@ -15,6 +15,7 @@ param(
     [int]$DelaySeconds = 5,
     [string]$ClaudeCmd = "claude",
     [string]$Model = "",
+    [string]$Agent = "intern",
     [string]$DigestModel = "",
     [switch]$LogTokens,
     [switch]$NoPreDownload
@@ -214,8 +215,10 @@ function Invoke-RawDigest {
         $orig = Join-Path $RawDir ($f.BaseName + ".orig.txt")
         if (Test-Path $orig) { continue }  # already digested
         Write-Host "  [DIGEST] $($f.Name)"
-        $prompt = "Mode: WORKER. Token-reduction pre-digest of ONE file. Read: $($f.FullName) (it starts with a SOURCE_URL line). Rewrite it as a condensed digest that KEEPS: the SOURCE_URL line verbatim, every number/date/price/measurement, named entities, direct claims, and anything relevant to RESEARCH_FOCUS: '$focus'. STRIP only: navigation, menus, cookie/consent text, ads, footers, repeated boilerplate, unrelated article links. Do NOT summarize away facts -- keep them, just remove the chrome. Steps: (1) if $orig does not already exist, copy $($f.FullName) to $orig; (2) overwrite $($f.FullName) with the digest. Touch no other files. No user prompts."
-        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $LogFile -Model $DigestModel -LogTokens:$LogTokens
+        $prompt = "Mode: WORKER. Token-reduction pre-digest of ONE file. Read: $($f.FullName) (it starts with a SOURCE_URL line). Rewrite it as a condensed digest that KEEPS: the SOURCE_URL line verbatim, every number/date/price/measurement, named entities, direct claims, and anything relevant to RESEARCH_FOCUS: '$focus'. STRIP only: navigation, menus, cookie/consent text, ads, footers, repeated boilerplate, unrelated article links. Do NOT summarize away facts -- keep them, just remove the chrome. Steps: (1) if $orig does not already exist, write a copy of $($f.FullName) to $orig; (2) overwrite $($f.FullName) with the digest. Touch no other files. No user prompts."
+        # Digest only reads + rewrites raw files; no state script, no network.
+        $digestAllow = @('Read','Glob','Write(MemoryVault/Raw/**)','Edit(MemoryVault/Raw/**)')
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $LogFile -Model $DigestModel -AllowedTools $digestAllow -LogTokens:$LogTokens
         if ($res.LimitHit) { return @{ LimitHit = $true } }
     }
     return @{ LimitHit = $false }
@@ -248,6 +251,13 @@ $logFile        = Join-Path $absTaskDir "iter-log.txt"
 $rawDir         = Join-Path $absTaskDir "raw"
 
 if (-not (Test-Path $progressFile)) { Write-Host "ERROR: progress.md missing in $absTaskDir"; exit 1 }
+
+# Hardened-worker allowlist (FETCH). Least privilege: fetch leftover URLs, write
+# raw files, drive state. No arbitrary Bash -- closes the prompt-injection -> shell
+# hole that --dangerously-skip-permissions left open. Bash scoped to the state script
+# only; its path is also injected into the prompt so the worker's command matches.
+$StateScriptRel    = "Skills/AnotherSkillBundle/Skills/SharedScripts/research_state.py"
+$FetchAllowedTools = @('Read','Glob','WebFetch','Write(MemoryVault/Raw/**)','Edit(MemoryVault/Raw/**)',"Bash(python $StateScriptRel`:*)")
 
 Write-Host "Run-SourceScrape starting. TaskDir: $absTaskDir"
 
@@ -290,12 +300,12 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         Write-Host "  $remaining candidates still pending -- handing to Claude."
     }
 
-    $prompt = "Continue source scrape in $absTaskDir. Mode: WORKER. Follow SourceScrapeSkill protocol (FETCH loop). No user prompts. Pre-downloaded candidates have status 'fetched' with raw: path -- skip WebFetch for those. Handle remaining pending. If no more pending, set PHASE=INGEST STATUS=READY_INGEST and exit."
+    $prompt = "Continue source scrape in $absTaskDir. Mode: WORKER. Follow SourceScrapeSkill protocol (FETCH loop). No user prompts. Pre-downloaded candidates have status 'fetched' with raw: path -- skip WebFetch for those. Handle remaining pending. If no more pending, set PHASE=INGEST STATUS=READY_INGEST and exit. Run the state script via: python $StateScriptRel <cmd> ..."
 
     "`n=== [$stamp] SourceScrape iter $i ===" | Out-File -FilePath $logFile -Append -Encoding utf8
 
     try {
-        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -LogTokens:$LogTokens
+        $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -Agent $Agent -AllowedTools $FetchAllowedTools -LogTokens:$LogTokens
         if ($res.LimitHit) {
             Write-Host $UsageLimitSentinel
             $UsageLimitSentinel | Out-File -FilePath $logFile -Append -Encoding utf8
