@@ -63,15 +63,22 @@ function Handle-UsageLimit {
     param([string]$AbsTaskDir, [string]$TaskMd, [string]$ProgressFile, [string]$LogFile)
 
     $onLimit = (Get-TaskField $TaskMd "ON_LIMIT" "stop").ToLower()
+
+    # RELAUNCH_CAP from task.md (interview-set); default 3 when absent or unparseable.
+    $relaunchCap = 3
+    $capField = Get-TaskField $TaskMd "RELAUNCH_CAP" "3"
+    if ($capField -match '\d+') { $relaunchCap = [int]$Matches[0] }
+
     Invoke-UsageLimitHandler `
         -TaskDir              $AbsTaskDir `
         -ProgressFile         $ProgressFile `
         -LogFile              $LogFile `
         -RelaunchScript       $PSCommandPath `
         -RelaunchEnabled      ($onLimit -eq 'relaunch') `
+        -MaxRelaunches        $relaunchCap `
         -TaskNamePrefix       "Autoresearch-Relaunch" `
         -RelaunchDescription  "Auto-relaunch autoresearch task after token reset" `
-        -FlagSummary          "on_limit=$onLimit" | Out-Null
+        -FlagSummary          "on_limit=$onLimit,cap=$relaunchCap" | Out-Null
 }
 
 # ── Main dispatcher loop ──────────────────────────────────────────────────────

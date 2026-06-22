@@ -2,7 +2,6 @@
 name: IngestionSkill
 disable-model-invocation: true
 description: Read raw .txt source files, extract facts with cross-source verification, integrate into Wiki pages. One source per session. Used by AutoresearchSkill during INGEST phase. Can be invoked manually to ingest raw files into an existing wiki.
-triggers: ["ingest sources", "ingest raw", "extract facts", "integrate into wiki"]
 ---
 
 # Ingestion Skill
@@ -39,6 +38,7 @@ Goal: one source at a time, deep fact extraction, wiki integration, verification
    - If content is irrelevant / garbage after reading → `mark <task_dir> <url> skipped-ingest` → step 6.
    - Extract facts, integrate into wiki per the project's wiki conventions (page format, citations, wiki-links). All output in topic's chosen language.
    - **Citations must use the original URL**, not the raw .txt filename. The URL is in `next_candidate.url` and on the `SOURCE_URL:` line at the top of each raw file. Raw txt files are temporary and will be deleted.
+   - **Legal citation tagging**: if the source concerns laws, regulations, or legislation, tag each cited provision (law name + article/section number, e.g. "§ 42 odst. 1 ObčZ") with `*(law-verify)*`. Do not attempt to verify currency during ingest — that is REVIEW's job. Inline mode exception: resolve `*(law-verify)*` inline (see below).
    - **Conflict rule (local only)**: if a new fact contradicts something already on **the sub-page you are editing**, do not overwrite — record both versions inline with their sources and flag `⚠️ CONFLICT: Source A says X (source: A); Source B says Y (source: B). Needs resolution.` Do NOT scan other wiki pages hunting for contradictions; cross-page conflicts are REVIEW's job.
    - **No cross-source verification during ingest.** Cross-checking forces re-reading other sources/pages and burns turns (the main cost driver). Extract only from THIS source. Tag each crisp factual atom (years, formulas, type localities, etymologies, namesakes, "first/largest/only" superlatives) with `*(unverified)*`. The REVIEW phase cross-checks every tagged atom against the completed wiki + raw files in one pass. Exception: if THIS source itself states a second corroboration, you may drop the tag. (Orchestrated mode only — inline mode has no REVIEW; see Inline mode below.)
    - Defer `{{WIKI_ROOT}}/Index.md` and `{{WIKI_ROOT}}/Log.md` updates to **once at session end**, not per source — re-opening them every source re-reads context.
@@ -81,6 +81,7 @@ If a scraped source links to a clearly-better source not in `candidates.md`, app
 - **Etymology vs alias.** Check *which name* is "named after X" — canonical name vs nickname.
 - **Conflated superlatives.** If two pages both claim "largest crystals up to N cm", one borrowed from the other. Verify independently.
 - **Stale aggregate stats.** "X of ~4000 IMA species" type figures decay — cite year of count.
+- **Law currency.** Cited legal provisions may be repealed, amended, or renumbered. Always tag `*(law-verify)*` on specific article/section references during ingest; REVIEW cross-checks via WebSearch against official current text.
 
 ---
 
@@ -99,7 +100,7 @@ Update root `{{WIKI_ROOT}}/Index.md` to link new folder.
 
 Caller supplies `raw_files=[...]` + `wiki_target={{WIKI_ROOT}}/Foo/` + `research_focus="..."` + `language=English|Czech`.
 
-Inline mode has **no REVIEW phase**, so do the cross-source verification pass inline (don't defer it / don't leave `*(unverified)*` tags dangling).
+Inline mode has **no REVIEW phase**, so do the cross-source verification pass inline (don't defer it / don't leave `*(unverified)*` or `*(law-verify)*` tags dangling). For `*(law-verify)*` tags: WebSearch for the current official text of the cited provision; if still valid remove the tag; if amended/repealed note it inline.
 
 For each file in order:
 1. Read it. If first line is `SOURCE_URL: <url>`, that's the citation source.

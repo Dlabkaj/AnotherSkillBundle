@@ -2,7 +2,6 @@
 name: SourceScrapeSkill
 disable-model-invocation: true
 description: Find and fetch web sources. Two sub-protocols — DISCOVER (WebSearch + Glob to build candidate list) and FETCH (download URLs to raw .txt files). Used by AutoresearchSkill during bootstrap and FETCH phase. Can also be invoked manually for one-off scraping.
-triggers: ["scrape sources", "fetch urls", "discover sources", "build candidates", "source scrape"]
 ---
 
 # Source Scrape Skill
@@ -42,6 +41,8 @@ Steps:
    ```
 5. **YouTube sources**: use type `[youtube]` for YouTube video URLs. The PS runner (`SourceScrapeSkill/Run-SourceScrape.ps1`) auto-fetches transcripts via `fetch_youtube_transcript.py` (requires `pip install youtube-transcript-api`). Add `note: code-heavy — visuals missing` if the video shows code that won't be readable from a transcript. See [YouTubeTranscriptSkill.md](YouTubeTranscriptSkill.md).
 6. Don't load full pages here. Snippets are enough to rank.
+
+**Legal topic sources**: if `TOPIC` or `RESEARCH_FOCUS` concerns laws, regulations, or legislation — rank official sources highest: government portals (e.g. zakonyprolidi.cz, EUR-Lex, official gazettes), then academic/legal commentary, then news. Flag secondary-only sources as lower confidence. Record any `Účinnost` / effective-date or `Datum zrušení` / repeal-date metadata found in snippets directly in the candidate entry as `note: effective <date>` or `note: repealed <date>`.
 
 **Insufficient sources fallback**: depth target is approximate. If candidate count is significantly below depth target (e.g. HIGH=50 yields only 18 candidates after exhausting reasonable angle queries) → proceed anyway. Append a `NOTE:` line to `task.md`:
 ```

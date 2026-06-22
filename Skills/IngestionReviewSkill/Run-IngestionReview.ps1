@@ -56,10 +56,11 @@ if ($phase -ne "REVIEW") { Write-Host "PHASE=$phase -- not REVIEW, exiting."; ex
 $stateScript = Join-Path $PSScriptRoot "..\SharedScripts\research_state.py"
 
 # Hardened-worker allowlist (REVIEW). Reads raw + wiki, fixes wiki in place, writes
-# review_notes.md into the task dir (under MemoryVault/Raw), drives state. No WebFetch,
-# no arbitrary Bash. State script scoped + injected into the prompt.
+# review_notes.md into the task dir (under MemoryVault/Raw), drives state. WebSearch
+# allowed for *(law-verify)* currency checks. No WebFetch, no arbitrary Bash. State
+# script scoped + injected into the prompt.
 $StateScriptRel     = "Skills/AnotherSkillBundle/Skills/SharedScripts/research_state.py"
-$ReviewAllowedTools = @('Read','Glob','Write(MemoryVault/Raw/**)','Edit(MemoryVault/Wiki/**)','Edit(MemoryVault/Raw/**)',"Bash(python $StateScriptRel`:*)")
+$ReviewAllowedTools = @('Read','Glob','WebSearch','Write(MemoryVault/Raw/**)','Edit(MemoryVault/Wiki/**)','Edit(MemoryVault/Raw/**)',"Bash(python $StateScriptRel`:*)")
 
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Host "=== [$stamp] IngestionReview (multi-pass, max $MaxPasses) ==="

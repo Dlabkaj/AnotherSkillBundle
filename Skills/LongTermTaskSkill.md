@@ -1,7 +1,6 @@
 ---
 name: LongTermTaskSkill
 description: Manage long-term tasks that don't fit in a single context session. Decompose into partial tasks, each runs in its own claude -p subprocess, metric-driven iteration, background autonomy via PowerShell runner.
-triggers: ["long term task", "long-term task", "ltt", "create LTT", "run LTT", "new long term task"]
 ---
 
 # LongTermTaskSkill

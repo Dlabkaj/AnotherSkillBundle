@@ -1,8 +1,8 @@
 ---
 name: AutoresearchSkill
+user-invocable: true
 disable-model-invocation: true
 description: Orchestrates autonomous research. BOOTSTRAP only — interview user, write task brief, delegate candidate-list build to SourceScrapeSkill, print launch command. Runs background via PowerShell dispatcher that chains SourceScrapeSkill (FETCH) → IngestionSkill (INGEST) → IngestionReviewSkill (REVIEW).
-triggers: ["autoresearch", "auto research", "research and fill wiki", "background research", "research topic", "deep research"]
 ---
 
 # Autoresearch Skill (Orchestrator)
@@ -43,11 +43,11 @@ Cover all of these. Use up to two batches of questions (max 4 per AskUserQuestio
 - **Authoritative sources to prioritize** (free-text, optional)
 - **Hard cap on sources scraped** (default 50)
 
-**On token limit (`ON_LIMIT`)** — don't ask by default. Set from prompt keywords:
-- Prompt contains "auto-relaunch", "auto relaunch", "schedule retry", or "keep going after limit" → `ON_LIMIT: relaunch`
-- Otherwise → `ON_LIMIT: stop`
+**On token limit (`ON_LIMIT`)** — **always ask** (add to a batch, don't infer from keywords):
+- **Relaunch on usage limit?** stop (default) / relaunch. → `ON_LIMIT: stop|relaunch`
+- If relaunch: **max auto-relaunches?** free-text integer, **default 3** if unanswered. → `RELAUNCH_CAP: <N>`
 
-When `relaunch`, dispatcher registers a Task Scheduler one-shot job ~1 min after token reset. Caps at 3 auto-relaunches per task. User can always edit `task.md` to flip the flag later.
+When `relaunch`, dispatcher registers a Task Scheduler one-shot job after token reset, repeating until `RELAUNCH_CAP` attempts, then stops. User can edit `task.md` to flip the flag or change the cap later.
 
 ### 2. Write task brief
 
@@ -64,6 +64,7 @@ Create `{{RAW_ROOT}}/<topic-slug>/` (slug = kebab-case topic):
   HARD_CAP: <N>
   AUTHORITATIVE: <list or none>
   ON_LIMIT: stop|relaunch
+  RELAUNCH_CAP: <N>        # only when ON_LIMIT=relaunch; max auto-relaunches, default 3
   LOG_TOKENS: true|false   # optional, default false — log per-session token usage to iter-log.txt
   ```
 - **`progress.md`** — live state, this exact format:
@@ -94,15 +95,15 @@ Print launch command and exit. Terse, nothing extra.
 
 ```
 Ready. Run before AFK:
-  powershell -File Skills/AutoresearchSkill/Run-Autoresearch.ps1 -TaskDir {{RAW_ROOT}}/<slug>
+  powershell -File {{SKILLS_ROOT}}/AutoresearchSkill/Run-Autoresearch.ps1 -TaskDir {{RAW_ROOT}}/<slug>
 
 Or from PowerShell prompt:
-  .\Skills\AutoresearchSkill\Run-Autoresearch.ps1 -TaskDir {{RAW_ROOT}}\<slug>
+  .\{{SKILLS_ROOT}}\AutoresearchSkill\Run-Autoresearch.ps1 -TaskDir {{RAW_ROOT}}\<slug>
 
 Progress:   {{RAW_ROOT}}/<slug>/progress.md
 Stop:       New-Item {{RAW_ROOT}}\<slug>\STOP.md
 On limit:   <ON_LIMIT value> (edit task.md to change)
-            relaunch -> Task Scheduler one-shot ~1 min after reset, max 3 attempts
+            relaunch -> Task Scheduler one-shot ~1 min after reset, max RELAUNCH_CAP attempts (default 3)
             stop     -> dispatcher exits; relaunch manually
 
 Permissions (required in .claude/settings.json -> permissions.allow):

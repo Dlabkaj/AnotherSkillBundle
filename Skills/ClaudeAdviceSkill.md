@@ -1,7 +1,6 @@
 ---
 name: ClaudeAdviceSkill
 description: Always-active. On every turn, check the user's recent messages and your own intended actions against the anti-pattern checklist. If a match, surface a one-line nudge with a wiki link.
-triggers: ["always-active"]
 ---
 
 # Claude Advice Skill

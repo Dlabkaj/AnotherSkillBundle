@@ -1,7 +1,6 @@
 ---
 name: YouTubeTranscriptSkill
 description: Fetch YouTube video transcripts and save in autoresearch raw format for ingestion. Used standalone or automatically by AutoresearchSkill/Run-Autoresearch.ps1 for [youtube] candidates.
-triggers: ["youtube transcript", "fetch transcript", "download transcript", "youtube source"]
 ---
 
 # YouTube Transcript Skill

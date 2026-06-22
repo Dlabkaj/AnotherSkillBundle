@@ -2,7 +2,6 @@
 name: LibrarianSkill
 disable-model-invocation: true
 description: Standing wiki maintenance — structural lint (orphans, broken wiki-links, format, Index/Log sync), flag-only second-source audit, and raw/ cleanup of completed research tasks. Used by the Intern agent; invocable manually on any wiki folder.
-triggers: ["wiki lint", "librarian", "orphan pages", "broken links", "audit wiki", "clean raw", "wiki maintenance"]
 ---
 
 # Librarian Skill

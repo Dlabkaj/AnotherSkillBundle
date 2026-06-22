@@ -2,7 +2,6 @@
 name: IngestionReviewSkill
 disable-model-invocation: true
 description: One-shot cross-wiki consistency check after autoresearch ingestion. Reads recently-touched wiki pages, fixes citation errors, flags conflicts and single-source superlatives, writes review_notes.md. Used by AutoresearchSkill as the final REVIEW phase. Can be invoked manually on any set of wiki pages.
-triggers: ["review wiki", "ingestion review", "consistency check", "cross-check wiki pages"]
 ---
 
 # Ingestion Review Skill
@@ -34,6 +33,12 @@ When in WORKER mode, follow the hard rules in [AutoresearchSkill.md § Hard rule
    - **Single-source superlatives**: any "first/largest/only/always/never" claim added during this run that has only one source and no `*(needs second source)*` marker → add the marker.
    - **Cross-page fact consistency**: same entity (library name, API call, constant) described differently on two pages → reconcile or flag.
    - **Stale library references**: if a deprecated library (e.g. `ib_insync`) is recommended without noting the current successor → add a note.
+   - **Legal citation currency** (`*(law-verify)*` tags): for each tagged legal provision (law name + article/section), WebSearch for the current official text. Apply:
+     - Still valid and matches → remove the `*(law-verify)*` tag.
+     - Amended or renumbered but substance intact → correct the reference inline, note the change in a parenthetical, remove the tag → counts as **low**.
+     - Repealed or invalidated → mark `⚠️ REPEALED:` inline, add to OPEN QUESTIONS → counts as **high**.
+     - Cannot confirm from available sources → replace with `*(needs law verification)*` → counts as **low**.
+   Use official sources: government portals, EUR-Lex, official gazettes. Do not rely on secondary commentary alone.
 5. **Fix issues in-place** in the wiki files. Prefer minimal edits — correct the error, add the flag. Don't rewrite sections that have no issue.
 6. **Refresh review summary** at `<task_dir>/review_notes.md` (record this pass's findings):
    ```
