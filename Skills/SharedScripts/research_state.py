@@ -118,6 +118,33 @@ def pick_next_candidate(task_dir, want_status):
     return None
 
 
+PART_SUFFIX_RE = re.compile(r"#part\d+$")
+
+
+def count_ingested_urls(task_dir):
+    """Distinct source URLs with status 'ingested', collapsing chunk parts
+    (url#partN) to one. Caps count sources, not chunk files."""
+    lines = (Path(task_dir) / "candidates.md").read_text(encoding="utf-8-sig").splitlines()
+    entry_re = re.compile(r"^- \[(\w+)\] (.+?)(?:\s+(?:--|—)\s+)(.+)$")
+    urls = set()
+    i = 0
+    while i < len(lines):
+        m = entry_re.match(lines[i])
+        if m:
+            url = m.group(3).strip()
+            status = "pending"
+            j = i + 1
+            while j < len(lines) and lines[j].startswith("  "):
+                kv = lines[j].strip()
+                if kv.startswith("status: "):
+                    status = kv[8:]
+                j += 1
+            if status == "ingested":
+                urls.add(PART_SUFFIX_RE.sub("", url))
+        i += 1
+    return len(urls)
+
+
 def count_statuses(task_dir):
     lines = (Path(task_dir) / "candidates.md").read_text(encoding="utf-8-sig").splitlines()
     counts = {}
@@ -152,9 +179,11 @@ def check_stop(task_dir, progress, task, counts):
         hard_cap = int(task.get("HARD_CAP", "0"))
     except ValueError:
         hard_cap = 0
-    ingested = progress.get("SOURCES_INGESTED", 0)
+    # Caps count distinct source URLs, not chunk parts (a large source split into
+    # url#partN rows must count once).
+    ingested = count_ingested_urls(task_dir)
     if hard_cap > 0 and ingested >= hard_cap:
-        return {"stop": True, "reason": f"hard_cap {ingested}/{hard_cap}"}
+        return {"stop": True, "reason": f"hard_cap {ingested}/{hard_cap} urls"}
 
     phase = progress.get("PHASE", "FETCH")
     if phase == "INGEST" and depth in DIMINISHING:

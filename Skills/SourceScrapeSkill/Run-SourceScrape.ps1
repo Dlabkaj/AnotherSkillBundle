@@ -17,6 +17,10 @@ param(
     [string]$Model = "",
     [string]$Agent = "intern",
     [string]$DigestModel = "",
+    [int]$MaxRawChars = 100000,   # max chars per raw chunk file (~25-30k tokens). A
+                                  # source larger than this is split into <slug>.partNN
+                                  # files, each its own candidate row, so the whole
+                                  # source is ingested without overflowing a worker.
     [switch]$LogTokens,
     [switch]$NoPreDownload
 )
@@ -27,16 +31,76 @@ $ErrorActionPreference    = "Continue"
 
 . "$PSScriptRoot\..\SharedScripts\_runner-helpers.ps1"
 
-# ── Helper: strip HTML tags to plain text ─────────────────────────────────────
+# ── Helper: hard-wrap one over-long line at word boundaries ───────────────────
+# Read truncates any single line over ~2000 chars, so no wrapped line may exceed
+# $Width. Breaks at the last space before $Width; hard-cuts a giant token (e.g. a
+# base64 blob) only when no usable space exists.
+function Format-WrappedLine {
+    param([string]$Line, [int]$Width = 1500)
+    if ($Line.Length -le $Width) { return $Line }
+    $out = [System.Collections.Generic.List[string]]::new()
+    while ($Line.Length -gt $Width) {
+        $cut = $Line.LastIndexOf(' ', $Width - 1)
+        if ($cut -lt [int]($Width * 0.5)) { $cut = $Width }   # no good break -> hard cut
+        $out.Add($Line.Substring(0, $cut).TrimEnd())
+        $Line = $Line.Substring($cut).TrimStart()
+    }
+    if ($Line) { $out.Add($Line) }
+    return ($out -join "`n")
+}
+
+# ── Helper: strip HTML to plain text, PRESERVING line structure ───────────────
+# Full whitespace-collapse (old behaviour) flattened the page to one line, which
+# Read then truncated to ~2000 chars -- i.e. most of every source was silently
+# lost. Instead: turn block-level tags into newlines, strip the rest, collapse
+# only intra-line runs, then wrap any remaining over-long line.
 function Get-PlainText {
     param([string]$Html)
     $t = $Html -replace '(?s)<script[^>]*>.*?</script>', ' '
     $t = $t    -replace '(?s)<style[^>]*>.*?</style>',  ' '
+    # Block-level boundaries -> newline, so paragraphs/headings/list items survive.
+    $t = $t    -replace '(?i)<br\s*/?>', "`n"
+    $t = $t    -replace '(?i)</(p|div|h[1-6]|li|tr|section|article|header|footer|blockquote)>', "`n"
     $t = $t    -replace '<[^>]+>', ' '
     $t = $t    -replace '&amp;',  '&'  -replace '&lt;',   '<' -replace '&gt;',  '>'
     $t = $t    -replace '&quot;', '"'  -replace '&nbsp;', ' ' -replace '&#39;', "'"
-    $t = $t    -replace '\s+',    ' '
-    return $t.Trim()
+    $t = $t    -replace '[ \t]+', ' '             # collapse intra-line runs only
+    $lines = $t -split '\r?\n' | ForEach-Object { $_.Trim() }
+    $lines = $lines | ForEach-Object { Format-WrappedLine $_ }   # wrap, may emit \n
+    $text  = ($lines -join "`n")
+    $text  = $text -replace '(\r?\n){3,}', "`n`n"  # collapse blank-line runs
+    return $text.Trim()
+}
+
+# ── Helper: wrap every line of a plain-text body (for non-HTML, e.g. YT) ──────
+function Format-WrappedText {
+    param([string]$Text, [int]$Width = 1500)
+    return (($Text -split '\r?\n' | ForEach-Object { Format-WrappedLine $_ $Width }) -join "`n")
+}
+
+# ── Helper: split a body into <=MaxChars chunks at line boundaries ────────────
+# No chunk exceeds MaxChars, so each part loads whole into a worker's context
+# (no truncation, no silent session loss). A single line longer than MaxChars is
+# hard-split as a last resort -- doesn't happen after Format-Wrapped* (<=1500/line).
+function Split-IntoChunks {
+    param([string]$Text, [int]$MaxChars)
+    if ($MaxChars -le 0 -or $Text.Length -le $MaxChars) { return ,@($Text) }
+    $chunks = [System.Collections.Generic.List[string]]::new()
+    $sb = [System.Text.StringBuilder]::new()
+    foreach ($ln in ($Text -split "`n")) {
+        $piece = $ln + "`n"
+        while ($piece.Length -gt $MaxChars) {
+            if ($sb.Length -gt 0) { $chunks.Add($sb.ToString().TrimEnd("`n")); [void]$sb.Clear() }
+            $chunks.Add($piece.Substring(0, $MaxChars))
+            $piece = $piece.Substring($MaxChars)
+        }
+        if ($sb.Length -gt 0 -and ($sb.Length + $piece.Length) -gt $MaxChars) {
+            $chunks.Add($sb.ToString().TrimEnd("`n")); [void]$sb.Clear()
+        }
+        [void]$sb.Append($piece)
+    }
+    if ($sb.Length -gt 0) { $chunks.Add($sb.ToString().TrimEnd("`n")) }
+    return ,$chunks.ToArray()
 }
 
 # ── Helper: derive a slug from URL (YouTube video id or sanitized URL) ───────
@@ -54,40 +118,68 @@ function Get-UrlSlug {
     return $slug
 }
 
-# ── Helper: fetch a single URL to <RawDir>/<slug>.txt. Returns $true on success. ──
+# ── Helper: fetch one URL to raw chunk file(s). Returns the part file names. ──
+# Returns @{ Saved; Slug; Url; Parts=@(basename...) }. One source <=MaxRawChars
+# yields a single <slug>.txt; a larger one yields <slug>.part01.txt..partNN.txt.
+# Each file carries the clean SOURCE_URL header (citations stay clean); the caller
+# registers parts 2..N as their own candidate rows.
 function Invoke-SingleFetch {
     param([string]$Url, [string]$RawDir)
     $isYouTube = ($Url -match 'youtube\.com/watch' -or $Url -match 'youtu\.be/')
     $slug      = Get-UrlSlug $Url
-    $outPath   = Join-Path $RawDir "$slug.txt"
 
-    if (Test-Path $outPath) {
-        Write-Host "  [DL] already cached: $slug.txt"
-        return @{ Saved = $true; Path = $outPath; Slug = $slug }
+    # Cache: any existing <slug>*.txt (single or chunked) -> reuse, don't re-fetch.
+    $existing = @(Get-ChildItem -Path $RawDir -Filter "$slug*.txt" -File -ErrorAction SilentlyContinue |
+                  Sort-Object Name)
+    if ($existing.Count -gt 0) {
+        Write-Host "  [DL] already cached: $($existing.Count) file(s) for $slug"
+        return @{ Saved = $true; Slug = $slug; Url = $Url; Parts = @($existing.Name) }
     }
 
+    # 1) Get plain, wrapped content (no header).
+    $content = $null
     if ($isYouTube) {
         Write-Host "  [YT] $Url"
         $pyScript = Join-Path $PSScriptRoot "..\SharedScripts\fetch_youtube_transcript.py"
-        $result   = python $pyScript $Url $outPath 2>&1
+        $tmp      = Join-Path $RawDir "$slug.fetch.tmp"
+        $result   = python $pyScript $Url $tmp 2>&1
         Write-Host "       $result"
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $outPath)) {
-            return @{ Saved = $true; Path = $outPath; Slug = $slug }
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $tmp)) {
+            return @{ Saved = $false; Slug = $slug; Url = $Url; Parts = @() }
         }
-        return @{ Saved = $false; Path = $outPath; Slug = $slug }
+        $body = [System.IO.File]::ReadAllText($tmp, [System.Text.Encoding]::UTF8)
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        $content = $body -replace '(?s)^SOURCE_URL:[^\n]*\r?\n---\r?\n', ''   # strip header
+        $content = Format-WrappedText $content
+    } else {
+        Write-Host "  [DL] $Url"
+        try {
+            $resp    = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 25 -ErrorAction Stop
+            $content = Get-PlainText $resp.Content
+        } catch {
+            Write-Host "       failed: $($_.Exception.Message)"
+            return @{ Saved = $false; Slug = $slug; Url = $Url; Parts = @() }
+        }
     }
 
-    Write-Host "  [DL] $Url"
-    try {
-        $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 25 -ErrorAction Stop
-        $text = "SOURCE_URL: $Url`n---`n" + (Get-PlainText $resp.Content)
-        [System.IO.File]::WriteAllText($outPath, $text, [System.Text.Encoding]::UTF8)
-        Write-Host "       saved -> $outPath"
-        return @{ Saved = $true; Path = $outPath; Slug = $slug }
-    } catch {
-        Write-Host "       failed: $($_.Exception.Message)"
-        return @{ Saved = $false; Path = $outPath; Slug = $slug }
+    # 2) Chunk + write part files.
+    $chunks = Split-IntoChunks -Text $content -MaxChars $MaxRawChars
+    $n      = $chunks.Count
+    $parts  = [System.Collections.Generic.List[string]]::new()
+    for ($k = 0; $k -lt $n; $k++) {
+        if ($n -eq 1) {
+            $name   = "$slug.txt"
+            $header = "SOURCE_URL: $Url`n---`n"
+        } else {
+            $name   = ("{0}.part{1:D2}.txt" -f $slug, ($k + 1))
+            $header = "SOURCE_URL: $Url`nPART: $($k + 1)/$n`n---`n"
+        }
+        [System.IO.File]::WriteAllText((Join-Path $RawDir $name), $header + $chunks[$k], [System.Text.Encoding]::UTF8)
+        $parts.Add($name)
     }
+    if ($n -gt 1) { Write-Host "       saved $n parts ($($content.Length) chars > $MaxRawChars)" }
+    else          { Write-Host "       saved -> $slug.txt" }
+    return @{ Saved = $true; Slug = $slug; Url = $Url; Parts = @($parts.ToArray()) }
 }
 
 # ── Helper: pre-download pending URLs in candidates.md (orchestrated mode) ────
@@ -129,15 +221,17 @@ function Invoke-BulkDownload {
             if ($hasPending -and -not $hasRaw) {
                 $fetchResult = Invoke-SingleFetch -Url $url -RawDir $RawDir
                 $saved       = $fetchResult.Saved
-                $relRawPath  = "raw/$($fetchResult.Slug).txt"
-                if ($saved) { $fetched++ } else { $failed++ }
+                $parts       = @($fetchResult.Parts)
+                if ($saved) { $fetched++ } else { $failed++ }   # count the source once, not per chunk
 
+                # Part 1 reuses the original candidate row (clean URL).
+                $firstRaw = if ($parts.Count -gt 0) { "raw/$($parts[0])" } else { "" }
                 $newBlock = [System.Collections.Generic.List[string]]::new()
                 foreach ($bl in $block) {
                     if ($bl -match '^\s+status:\s*pending') {
                         if ($saved) {
                             $newBlock.Add(($bl -replace 'pending', 'fetched'))
-                            $newBlock.Add("  raw: $relRawPath")
+                            $newBlock.Add("  raw: $firstRaw")
                         } else {
                             $newBlock.Add(($bl -replace 'pending', 'skipped-fetch'))
                         }
@@ -146,6 +240,20 @@ function Invoke-BulkDownload {
                     }
                 }
                 $out.AddRange($newBlock)
+
+                # Parts 2..N become their own candidate rows. The url carries a unique
+                # #partK token so cmd_mark (match-by-substring) targets the right row;
+                # the raw file's SOURCE_URL header stays clean for citations.
+                if ($saved -and $parts.Count -gt 1) {
+                    $entryType = 'web'; $entryTitle = $url
+                    if ($line -match '^- \[(\w+)\]\s*(.+?)\s+(?:--|—)\s+') { $entryType = $Matches[1]; $entryTitle = $Matches[2].Trim() }
+                    for ($p = 1; $p -lt $parts.Count; $p++) {
+                        $pn = $p + 1
+                        $out.Add("- [$entryType] $entryTitle (part $pn/$($parts.Count)) -- $url#part$pn")
+                        $out.Add("  status: fetched")
+                        $out.Add("  raw: raw/$($parts[$p])")
+                    }
+                }
                 $changed = $true
                 $i = $k
                 continue

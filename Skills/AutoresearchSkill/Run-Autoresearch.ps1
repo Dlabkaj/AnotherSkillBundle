@@ -16,6 +16,11 @@
 #                             files before INGEST (cuts ingest input tokens).
 #                             Empty = no pre-digest (default).
 #   -LogTokens                log per-session token usage to iter-log.txt
+#   -NoRelaunch               on usage-limit (sub-runner exit 42), do NOT schedule a
+#                             per-task relaunch -- bubble exit 42 up to the caller
+#                             instead. Used by Run-AutoQueue.ps1, which owns a single
+#                             coordinated relaunch for the whole queue (the token
+#                             budget is global, so two schedulers would compete).
 # Budget-tuned example: -FetchModel haiku -DigestModel haiku -IngestModel sonnet -ReviewModel opus
 # Models accept CLI aliases (haiku|sonnet|opus) or full ids.
 # Token logging can also be enabled in the brief via a `LOG_TOKENS: true` line in task.md.
@@ -28,7 +33,8 @@ param(
     [string]$IngestModel = "",
     [string]$ReviewModel = "",
     [string]$DigestModel = "",
-    [switch]$LogTokens
+    [switch]$LogTokens,
+    [switch]$NoRelaunch
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -123,6 +129,10 @@ for ($flip = 1; $flip -le $MaxPhaseTransitions; $flip++) {
     $subExit = $LASTEXITCODE
 
     if ($subExit -eq 42) {
+        if ($NoRelaunch) {
+            Write-Host "Usage limit hit. -NoRelaunch set: bubbling exit 42 to caller (queue owns relaunch)."
+            exit 42
+        }
         Handle-UsageLimit -AbsTaskDir $absTaskDir -TaskMd $taskMd -ProgressFile $progressFile -LogFile $logFile
         break
     }

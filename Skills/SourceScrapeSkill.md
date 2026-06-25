@@ -72,6 +72,10 @@ Goal: bulk-save raw page content. No wiki changes. Fast and cheap.
    3. Otherwise → loop to step 1.
 7. Exit.
 
+### Chunked (large) sources
+
+The runner's pre-download splits any source over ~100 KB into `raw/<slug>.partNN.txt` files (each with a clean `SOURCE_URL:` header + a `PART: k/N` line) and registers parts 2..N as **extra candidate rows** whose URL carries a `#partN` suffix (so `mark` targets the right row — the suffix is a bookkeeping token, not a real fragment to fetch). These are normal `fetched` candidates: INGEST each part like any other source, and cite the clean URL from its `SOURCE_URL:` header (never the `#partN` form). Do not delete or merge `#partN` rows.
+
 ### STOP_BLOCKED NOTES format
 
 Append verbatim to `progress.md`:

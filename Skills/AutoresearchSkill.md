@@ -115,6 +115,22 @@ Permissions (required in .claude/settings.json -> permissions.allow):
 
 ---
 
+## HEADLESS_BOOTSTRAP
+
+Non-interactive equivalent of BOOTSTRAP, driven by the queue orchestrator (`Scripts/Run-AutoQueue.ps1`) — see `Backlog/Analysis/rework-autoresearch-queue.md`. **No `AskUserQuestion`, no commits, no user-facing summary.**
+
+Inputs: a Backlog card path + a defaults set (passed in the worker prompt). Steps:
+
+1. Read the card. Use its `## Brief (for BOOTSTRAP)` block if present; else fall back to the card `summary` + AC.
+2. Fill any missing field from the defaults: `LANGUAGE`, `DEPTH`, `SOURCES` (`web+ytb` = web results **and** YouTube transcripts), `HARD_CAP`, `ON_LIMIT`, `RELAUNCH_CAP`, `LOG_TOKENS`. `WIKI_TARGET` defaults to `{{WIKI_ROOT}}/<TopicPascalCase>/`.
+3. `RESEARCH_FOCUS` — derive from the card SCOPE/goal. If none is derivable, use `"general overview of <topic>"` and append a low-confidence NOTE to `progress.md`.
+4. Write `task.md` (frozen brief, §2 format) + `progress.md` (READY_FETCH, §2 format).
+5. Run the SourceScrapeSkill DISCOVER sub-protocol → ranked `candidates.md`. Then stop. **Do NOT fetch or ingest.**
+
+The queue treats the task as bootstrapped only when `task.md` + a non-empty `candidates.md` exist.
+
+---
+
 ## Dispatcher behavior
 
 `Skills/AutoresearchSkill/Run-Autoresearch.ps1` is a thin outer loop that reads `PHASE` from `progress.md` and chains the matching sub-runner:
