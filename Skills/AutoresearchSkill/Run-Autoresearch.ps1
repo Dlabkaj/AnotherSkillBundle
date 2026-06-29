@@ -43,6 +43,15 @@ $ErrorActionPreference    = "Continue"
 
 . "$PSScriptRoot\..\SharedScripts\_runner-helpers.ps1"
 
+# Pin cwd to the PA repo root (4 levels up: AutoresearchSkill -> Skills ->
+# AnotherSkillBundle -> Skills -> repo). A scheduled-task relaunch of this
+# dispatcher starts in system32; without this the relative permission path-globs
+# in the sub-runner allowlists (Edit(MemoryVault/Wiki/**), ...) would not match
+# and worker Edit/Write/Bash calls would be denied. Sub-runners and claude are
+# invoked with '&' and inherit this cwd.
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
+Set-Location $repoRoot
+
 if (-not (Test-Path $TaskDir)) { Write-Host "ERROR: Task dir not found: $TaskDir"; exit 1 }
 $absTaskDir   = (Resolve-Path $TaskDir).Path
 $progressFile = Join-Path $absTaskDir "progress.md"

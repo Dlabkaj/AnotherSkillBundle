@@ -60,7 +60,9 @@ $stateScript = Join-Path $PSScriptRoot "..\SharedScripts\research_state.py"
 # allowed for *(law-verify)* currency checks. No WebFetch, no arbitrary Bash. State
 # script scoped + injected into the prompt.
 $StateScriptRel     = "Skills/AnotherSkillBundle/Skills/SharedScripts/research_state.py"
-$ReviewAllowedTools = @('Read','Glob','WebSearch','Write(MemoryVault/Raw/**)','Edit(MemoryVault/Wiki/**)','Edit(MemoryVault/Raw/**)',"Bash(python $StateScriptRel`:*)")
+# Grep: needed to pull targeted sections from large raw files (Read sizes the whole
+# file before honoring -limit). Write(Wiki): lets REVIEW create a missing Index page.
+$ReviewAllowedTools = @('Read','Glob','Grep','WebSearch','Write(MemoryVault/Raw/**)','Write(MemoryVault/Wiki/**)','Edit(MemoryVault/Wiki/**)','Edit(MemoryVault/Raw/**)',"Bash(python $StateScriptRel`:*)")
 
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Host "=== [$stamp] IngestionReview (multi-pass, max $MaxPasses) ==="
@@ -68,6 +70,7 @@ Write-Host "=== [$stamp] IngestionReview (multi-pass, max $MaxPasses) ==="
 $finalStatus = $null
 $lastHigh = 0
 $lastLow  = 0
+$blockedExit = $false
 
 for ($pass = 1; $pass -le $MaxPasses; $pass++) {
     if (Test-StopFile $absTaskDir) { Write-Host "STOP.md detected. Exiting."; exit 0 }
@@ -79,8 +82,10 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
 
     $prompt = "Run wiki review PASS in $absTaskDir. Mode: WORKER. Follow IngestionReviewSkill protocol (orchestrated multi-pass). This is pass $pass of max $MaxPasses. Read WIKI_PAGES_TOUCHED from progress.md, apply the full checklist INCLUDING deferred verification of *(unverified)* atoms, fix issues in place. Do NOT set STATUS -- the runner decides. Refresh review_notes.md, then print EXACTLY one final line: REVIEW_PASS_RESULT: high=<count> low=<count> fixed=<count> note=<short>. Count only issues you found and acted on THIS pass (high = conflicts/contradictions/bad citations/fabrications; low = needs-second-source/missing cross-link/minor format). No user prompts. Run the state script via: python $StateScriptRel <cmd> ..."
 
-    $passHigh = $null
-    $passLow  = $null
+    $passHigh    = $null
+    $passLow     = $null
+    $passNote    = ""
+    $passBlocked = $false
     try {
         $res = Invoke-WorkerSession -ClaudeCmd $ClaudeCmd -Prompt $prompt -LogFile $logFile -Model $Model -AllowedTools $ReviewAllowedTools -LogTokens:$LogTokens
         if ($res.LimitHit) {
@@ -88,12 +93,18 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
             $UsageLimitSentinel | Out-File -FilePath $logFile -Append -Encoding utf8
             exit 42
         }
-        $mm = [regex]::Matches($res.Output, 'REVIEW_PASS_RESULT:\s*high=(\d+)\s+low=(\d+)')
+        $mm = [regex]::Matches($res.Output, 'REVIEW_PASS_RESULT:\s*high=(\d+)\s+low=(\d+)(?:\s+fixed=(\d+))?(?:\s+note=(.*))?')
         if ($mm.Count -gt 0) {
             $last = $mm[$mm.Count - 1]
             $passHigh = [int]$last.Groups[1].Value
             $passLow  = [int]$last.Groups[2].Value
+            if ($last.Groups[4].Success) { $passNote = $last.Groups[4].Value }
         }
+        # A pass can report high=0 low=0 simply because it was BLOCKED (permission
+        # wall / denied tools) and applied NOTHING -- not because the wiki is clean.
+        # Detect that so a never-reviewed topic is never marked COMPLETE.
+        if ($res.Output -match '(?i)permission[- ]?wall|are all denied|denied in this session|cannot (apply|write|edit)') { $passBlocked = $true }
+        if ($passNote -match '(?i)permission|denied|blocked|wall')                                                       { $passBlocked = $true }
     } catch {
         "REVIEW ERROR (pass $pass): $_" | Out-File -FilePath $logFile -Append -Encoding utf8
         Write-Host "Review pass $pass errored: $_"
@@ -113,6 +124,18 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
     $lastHigh = $passHigh
     $lastLow  = $passLow
 
+    if ($passBlocked) {
+        # Worker hit a permission/tool wall and applied nothing. Relaunching the
+        # same pass won't help until the allowlist + cwd are right -- stop now and
+        # flag, rather than letting a high=0/low=0 no-op masquerade as converged.
+        Write-Host "  Pass $pass : BLOCKED (permission/tool wall, note='$passNote'). No edits applied -- NOT converging."
+        "REVIEW pass $pass BLOCKED -- worker reported a permission/tool wall (note='$passNote'); 0 edits applied. Fix the worker allowlist + cwd before relaunch." |
+            Out-File -FilePath $logFile -Append -Encoding utf8
+        $finalStatus = "STOP_NEEDS_WORK"
+        $blockedExit = $true
+        break
+    }
+
     if ($parsedOk -and $passHigh -eq 0 -and $passLow -eq 0) {
         $finalStatus = "COMPLETE"
         Write-Host "  Converged clean on pass $pass."
@@ -131,7 +154,11 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
 if (-not $finalStatus) { $finalStatus = "COMPLETE" }
 
 if ($finalStatus -eq "STOP_NEEDS_WORK") {
+    if ($blockedExit) {
+        $note = "REVIEW BLOCKED on pass $pass -- worker hit a permission/tool wall and applied 0 edits, so the wiki was NOT actually reviewed. This is a tooling failure, not a sources failure: check the worker allowlist and that the runner cwd is the repo root. Re-run REVIEW once fixed."
+    } else {
     $note = "Review did not converge after $MaxPasses passes. Residual on final pass high=$lastHigh low=$lastLow (flag rule: any high, or low>$NeedsWorkLowThreshold). Topic needs more sources or manual attention -- see review_notes.md."
+    }
     & python $stateScript update $absTaskDir "STATUS=STOP_NEEDS_WORK" "PHASE=REVIEW" "NOTES=$note" | Out-Null
     Write-Host ""
     Write-Host "=== REVIEW: NEEDS MORE WORK ==="
