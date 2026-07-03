@@ -223,7 +223,16 @@ function Invoke-WorkerSession {
     # and would greedily eat a trailing positional prompt (commander <tools...>),
     # producing "Input must be provided..." So feed the prompt through stdin -- the
     # CLI reads --print input from stdin when no prompt argument is present.
-    $output  = $Prompt | & $ClaudeCmd @cmdArgs 2>&1
+    # JERRY_WORKER=1 tells the project PreToolUse hook (main-agent-allow.py) this
+    # is a headless worker: the hook then stays silent instead of auto-allowing,
+    # so the --allowedTools allowlist above remains load-bearing.
+    $prevJerryWorker  = $env:JERRY_WORKER
+    $env:JERRY_WORKER = '1'
+    try {
+        $output = $Prompt | & $ClaudeCmd @cmdArgs 2>&1
+    } finally {
+        $env:JERRY_WORKER = $prevJerryWorker
+    }
     $rawText = ($output -join "`n")
     $text    = $rawText
 
