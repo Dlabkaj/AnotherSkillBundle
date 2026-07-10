@@ -66,6 +66,7 @@ Create `{{RAW_ROOT}}/<topic-slug>/` (slug = kebab-case topic):
   ON_LIMIT: stop|relaunch
   RELAUNCH_CAP: <N>        # only when ON_LIMIT=relaunch; max auto-relaunches, default 3
   LOG_TOKENS: true|false   # optional, default false — log per-session token usage to iter-log.txt
+  INGEST_BACKEND: claude|local:<model>   # optional, default claude. local:<model> delegates per-source extraction to LocalModelIngestionSkill (Ollama). Only ask when Jakub wants local ingestion.
   ```
 - **`progress.md`** — live state, this exact format:
   ```
@@ -122,7 +123,7 @@ Non-interactive equivalent of BOOTSTRAP, driven by the queue orchestrator (`Scri
 Inputs: a Backlog card path + a defaults set (passed in the worker prompt). Steps:
 
 1. Read the card. Use its `## Brief (for BOOTSTRAP)` block if present; else fall back to the card `summary` + AC.
-2. Fill any missing field from the defaults: `LANGUAGE`, `DEPTH`, `SOURCES` (`web+ytb` = web results **and** YouTube transcripts), `HARD_CAP`, `ON_LIMIT`, `RELAUNCH_CAP`, `LOG_TOKENS`. `WIKI_TARGET` defaults to `{{WIKI_ROOT}}/<TopicPascalCase>/`.
+2. Fill any missing field from the defaults: `LANGUAGE`, `DEPTH`, `SOURCES` (`web+ytb` = web results **and** YouTube transcripts), `HARD_CAP`, `ON_LIMIT`, `RELAUNCH_CAP`, `LOG_TOKENS`, `INGEST_BACKEND` (default `claude`). `WIKI_TARGET` defaults to `{{WIKI_ROOT}}/<TopicPascalCase>/`.
 3. `RESEARCH_FOCUS` — derive from the card SCOPE/goal. If none is derivable, use `"general overview of <topic>"` and append a low-confidence NOTE to `progress.md`.
 4. Write `task.md` (frozen brief, §2 format) + `progress.md` (READY_FETCH, §2 format).
 5. Run the SourceScrapeSkill DISCOVER sub-protocol → ranked `candidates.md`. Then stop. **Do NOT fetch or ingest.**

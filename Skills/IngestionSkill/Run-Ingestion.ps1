@@ -64,8 +64,13 @@ if (-not (Test-Path $progressFile)) { Write-Host "ERROR: progress.md missing in 
 
 # Hardened-worker allowlist (INGEST). Reads raw, writes wiki, drives state. No
 # WebFetch (Intern fetches), no arbitrary Bash. State script scoped + injected.
+# Local-backend (INGEST_BACKEND=local:<model>) also needs to invoke the local
+# ingestion runner via powershell; scoped to that one script. Bash allow rules
+# are exact-prefix + :* only (mid-string wildcards DENY, smoke-tested
+# 2026-07-10); quoted + unquoted -File variants both needed.
 $StateScriptRel     = "Skills/AnotherSkillBundle/Skills/SharedScripts/research_state.py"
-$IngestAllowedTools = @('Read','Glob','Write(MemoryVault/Wiki/**)','Edit(MemoryVault/Wiki/**)',"Bash(python $StateScriptRel`:*)")
+$LocalIngestRel     = "Skills/AnotherSkillBundle/Skills/LocalModelIngestionSkill/Run-LocalIngestion.ps1"
+$IngestAllowedTools = @('Read','Glob','Write(MemoryVault/Wiki/**)','Edit(MemoryVault/Wiki/**)',"Bash(python $StateScriptRel`:*)","Bash(powershell -NoProfile -File $LocalIngestRel`:*)","Bash(powershell -NoProfile -File `"$LocalIngestRel`"`:*)")
 
 Write-Host "Run-Ingestion starting. TaskDir: $absTaskDir"
 
@@ -93,7 +98,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         Write-Host "  No next_candidate (counts: $($preState.candidate_counts | ConvertTo-Json -Compress))"
     }
 
-    $prompt = "Continue ingestion in $absTaskDir. Mode: WORKER. Follow IngestionSkill protocol (INGEST loop). No user prompts. Read ONLY the next_candidate raw file (from research_state.py status) plus the single target sub-page; do NOT read other raw files or wiki pages. Extract facts from this source only, tag crisp atoms *(unverified)* (NO cross-source checking -- REVIEW does that), apply local conflict rule, mark done. Stop when context budget hit or PHASE changes. Run the state script via: python $StateScriptRel <cmd> ..."
+    $prompt = "Continue ingestion in $absTaskDir. Mode: WORKER. Follow IngestionSkill protocol (INGEST loop). No user prompts. Read ONLY the next_candidate raw file (from research_state.py status) plus the single target sub-page; do NOT read other raw files or wiki pages. Extract facts from this source only, tag crisp atoms *(unverified)* (NO cross-source checking -- REVIEW does that), apply local conflict rule, mark done. Stop when context budget hit or PHASE changes. Run the state script via: python $StateScriptRel <cmd> ... If task.md sets INGEST_BACKEND local, run the local ingestion script starting the command VERBATIM (permission rule is prefix-matched): powershell -NoProfile -File $LocalIngestRel <params>"
 
     "`n=== [$stamp] Ingestion iter $i ===" | Out-File -FilePath $logFile -Append -Encoding utf8
     Write-Host "  --- worker session ---"

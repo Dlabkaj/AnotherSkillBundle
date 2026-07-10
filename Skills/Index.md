@@ -14,6 +14,7 @@ Map of skills + scripts and how they wire together. Keep this file in sync when 
 | [SourceScrapeSkill.md](SourceScrapeSkill.md) | Find + fetch web sources. Builds `candidates.md`, downloads to `raw/*.txt`. | DISCOVER, FETCH, inline |
 | [IngestionSkill.md](IngestionSkill.md) | Read raw sources, extract facts with verification, write into Wiki. One source per loop. | WORKER (INGEST), inline |
 | [IngestionReviewSkill.md](IngestionReviewSkill.md) | One-shot cross-wiki consistency pass after ingestion. Fix citation errors, flag conflicts/single-source superlatives. | WORKER (REVIEW), inline |
+| [LocalModelIngestionSkill.md](LocalModelIngestionSkill.md) | Offload per-source extraction to a local Ollama model (chunk → `/api/generate` → append wiki draft → status). Called from INGEST when `INGEST_BACKEND=local:<model>`. Config `localAIModels.json`. | helper (called by INGEST), ad-hoc |
 | [LongTermTaskSkill.md](LongTermTaskSkill.md) | Goals too big for one session. Decompose → partial tasks → step-driven WORKER subprocesses. Reference docs (file formats, state-script API, runner internals) in sibling [details.md](LongTermTaskSkill/details.md). | CREATE, WORKER, MANUAL |
 | [YouTubeTranscriptSkill.md](YouTubeTranscriptSkill.md) | Fetch YouTube transcripts in autoresearch-compatible raw format. | standalone |
 | [LibrarianSkill.md](LibrarianSkill.md) | Standing wiki maintenance — structural lint (orphans, broken links, format, Index/Log sync), flag-only second-source audit, raw/ cleanup of COMPLETE tasks. Used by the Intern agent. | inline, WORKER |
@@ -31,6 +32,7 @@ Map of skills + scripts and how they wire together. Keep this file in sync when 
 | [SourceScrapeSkill/Run-SourceScrape.ps1](SourceScrapeSkill/Run-SourceScrape.ps1) | SourceScrapeSkill | Run-Autoresearch.ps1 (FETCH phase) |
 | [IngestionSkill/Run-Ingestion.ps1](IngestionSkill/Run-Ingestion.ps1) | IngestionSkill | Run-Autoresearch.ps1 (INGEST phase), user (inline mode) |
 | [IngestionReviewSkill/Run-IngestionReview.ps1](IngestionReviewSkill/Run-IngestionReview.ps1) | IngestionReviewSkill | Run-Autoresearch.ps1 (REVIEW phase), user (inline mode) |
+| [LocalModelIngestionSkill/Run-LocalIngestion.ps1](LocalModelIngestionSkill/Run-LocalIngestion.ps1) | LocalModelIngestionSkill | INGEST worker when `INGEST_BACKEND=local:<model>`, user (ad-hoc). Reads `localAIModels.json` (repo root). |
 | [LongTermTaskSkill/Run-LongTermTask.ps1](LongTermTaskSkill/Run-LongTermTask.ps1) | LongTermTaskSkill | user / Task Scheduler relaunch |
 | [LongTermTaskSkill/longterm_state.py](LongTermTaskSkill/longterm_state.py) | LongTermTaskSkill | Run-LongTermTask.ps1, WORKER prompts |
 
@@ -76,6 +78,8 @@ Map of skills + scripts and how they wire together. Keep this file in sync when 
 ```
 
 Phase progression: `FETCH ⇄ INGEST → REVIEW → COMPLETE`. INGEST can bounce back to FETCH if it discovers new candidates.
+
+When `task.md` sets `INGEST_BACKEND: local:<model>`, the INGEST worker delegates per-source extraction to `LocalModelIngestionSkill/Run-LocalIngestion.ps1` (Ollama) instead of extracting inline; Claude still drives state. Draft quality is cleaned up by the REVIEW phase.
 
 All task state lives under `{{RAW_ROOT}}/<topic-slug>/` (`task.md`, `progress.md`, `candidates.md`, `raw/`, optional `STOP.md`).
 
