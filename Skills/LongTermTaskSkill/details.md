@@ -1,6 +1,6 @@
 # LongTermTaskSkill — Reference
 
-Loaded on demand. Companion to [../LongTermTaskSkill.md](../LongTermTaskSkill.md). Skim only what you need.
+Loaded on demand. Companion to [SKILL.md](SKILL.md). Skim only what you need.
 
 ---
 

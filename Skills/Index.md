@@ -10,15 +10,15 @@ Map of skills + scripts and how they wire together. Keep this file in sync when 
 
 | Skill file | Purpose | Modes |
 | --- | --- | --- |
-| [AutoresearchSkill.md](AutoresearchSkill.md) | Orchestrator for autonomous research runs. BOOTSTRAP only — interview + write brief + delegate. Background loop chains FETCH → INGEST → REVIEW. | BOOTSTRAP |
-| [SourceScrapeSkill.md](SourceScrapeSkill.md) | Find + fetch web sources. Builds `candidates.md`, downloads to `raw/*.txt`. | DISCOVER, FETCH, inline |
-| [IngestionSkill.md](IngestionSkill.md) | Read raw sources, extract facts with verification, write into Wiki. One source per loop. | WORKER (INGEST), inline |
-| [IngestionReviewSkill.md](IngestionReviewSkill.md) | One-shot cross-wiki consistency pass after ingestion. Fix citation errors, flag conflicts/single-source superlatives. | WORKER (REVIEW), inline |
-| [LocalModelIngestionSkill.md](LocalModelIngestionSkill.md) | Offload per-source extraction to a local Ollama model (chunk → `/api/generate` → append wiki draft → status). Called from INGEST when `INGEST_BACKEND=local:<model>`. Config `localAIModels.json`. | helper (called by INGEST), ad-hoc |
-| [LongTermTaskSkill.md](LongTermTaskSkill.md) | Goals too big for one session. Decompose → partial tasks → step-driven WORKER subprocesses. Reference docs (file formats, state-script API, runner internals) in sibling [details.md](LongTermTaskSkill/details.md). | CREATE, WORKER, MANUAL |
-| [YouTubeTranscriptSkill.md](YouTubeTranscriptSkill.md) | Fetch YouTube transcripts in autoresearch-compatible raw format. | standalone |
-| [LibrarianSkill.md](LibrarianSkill.md) | Standing wiki maintenance — structural lint (orphans, broken links, format, Index/Log sync), flag-only second-source audit, raw/ cleanup of COMPLETE tasks. Used by the Intern agent. | inline, WORKER |
-| [ClaudeAdviceSkill.md](ClaudeAdviceSkill.md) | Always-active. Scans turn for anti-patterns (from `{{CLAUDE_EXPERIENCE_ROOT}}/AntiPatterns/`), surfaces one-line nudge with wiki link. | always-active |
+| [AutoresearchSkill](AutoresearchSkill/SKILL.md) | Orchestrator for autonomous research runs. BOOTSTRAP only — interview + write brief + delegate. Background loop chains FETCH → INGEST → REVIEW. | BOOTSTRAP |
+| [SourceScrapeSkill](SourceScrapeSkill/SKILL.md) | Find + fetch web sources. Builds `candidates.md`, downloads to `raw/*.txt`. | DISCOVER, FETCH, inline |
+| [IngestionSkill](IngestionSkill/SKILL.md) | Read raw sources, extract facts with verification, write into Wiki. One source per loop. | WORKER (INGEST), inline |
+| [IngestionReviewSkill](IngestionReviewSkill/SKILL.md) | One-shot cross-wiki consistency pass after ingestion. Fix citation errors, flag conflicts/single-source superlatives. | WORKER (REVIEW), inline |
+| [LocalModelIngestionSkill](LocalModelIngestionSkill/SKILL.md) | Offload per-source extraction to a local Ollama model (chunk → `/api/generate` → append wiki draft → status). Called from INGEST when `INGEST_BACKEND=local:<model>`. Config `localAIModels.json`. | helper (called by INGEST), ad-hoc |
+| [LongTermTaskSkill](LongTermTaskSkill/SKILL.md) | Goals too big for one session. Decompose → partial tasks → step-driven WORKER subprocesses. Reference docs (file formats, state-script API, runner internals) in sibling [details.md](LongTermTaskSkill/details.md). | CREATE, WORKER, MANUAL |
+| [YouTubeTranscriptSkill](YouTubeTranscriptSkill/SKILL.md) | Fetch YouTube transcripts in autoresearch-compatible raw format. | standalone |
+| [LibrarianSkill](LibrarianSkill/SKILL.md) | Standing wiki maintenance — structural lint (orphans, broken links, format, Index/Log sync), flag-only second-source audit, raw/ cleanup of COMPLETE tasks. Used by the Intern agent. | inline, WORKER |
+| [ClaudeAdviceSkill](ClaudeAdviceSkill/SKILL.md) | Always-active. Scans turn for anti-patterns (from `{{CLAUDE_EXPERIENCE_ROOT}}/AntiPatterns/`), surfaces one-line nudge with wiki link. | always-active |
 
 ---
 
@@ -114,8 +114,8 @@ Task state lives under `{{LONGTERM_ROOT}}/<task-slug>/`.
 
 ## Conventions
 
-- **Skill .md** at `Skills/<Name>Skill.md` (PascalCase + `Skill` suffix).
-- **Owned scripts** at `Skills/<Name>Skill/` — folder matches skill filename.
+- **Skill body** at `Skills/<Name>Skill/SKILL.md` (Claude Code dir format; folder is PascalCase + `Skill` suffix).
+- **Owned scripts** at `Skills/<Name>Skill/` — same folder as the skill's `SKILL.md`.
 - **Shared scripts** at `Skills/SharedScripts/`.
 - **`Run-*.ps1`** = orchestrators / dispatchers. **`*_state.py`** = state CLI. **`_runner-helpers.ps1`** = shared PS helpers (underscore prefix = not a runnable script).
 - New runner inside a skill subfolder must reference shared scripts via `$PSScriptRoot\..\SharedScripts\<script>`.

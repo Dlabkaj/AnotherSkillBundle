@@ -10,11 +10,11 @@ Delegate the token-heavy read+extract of one raw source to a local model via the
 
 Runner: `{{SKILLS_ROOT}}/LocalModelIngestionSkill/Run-LocalIngestion.ps1` (`{{SKILLS_ROOT}}` from `skillSettings.json`; run from repo root). Config: `localAIModels.json` at repo root.
 
-> Quality is lower than Claude ingestion — verification tagging, wiki-links, and translation are rougher. Output is a **draft**; the REVIEW phase ([IngestionReviewSkill](IngestionReviewSkill.md)) cleans it up. Use for volume where cost beats per-source polish.
+> Quality is lower than Claude ingestion — verification tagging, wiki-links, and translation are rougher. Output is a **draft**; the REVIEW phase ([IngestionReviewSkill](../IngestionReviewSkill/SKILL.md)) cleans it up. Use for volume where cost beats per-source polish.
 
 ## When to use
 
-- Task `task.md` has `INGEST_BACKEND: local:<model>` → [IngestionSkill](IngestionSkill.md) INGEST step 5 delegates here instead of extracting inline.
+- Task `task.md` has `INGEST_BACKEND: local:<model>` → [IngestionSkill](../IngestionSkill/SKILL.md) INGEST step 5 delegates here instead of extracting inline.
 - Jerry is asked to ingest a raw file with a local model ad-hoc.
 
 ## How Jerry calls it

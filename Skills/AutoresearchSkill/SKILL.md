@@ -11,9 +11,9 @@ Owns the **research brief**, hard rules, and dispatcher logic. The actual work i
 
 | Phase  | Skill                                                          | Runner                                                |
 | ------ | -------------------------------------------------------------- | ----------------------------------------------------- |
-| FETCH  | [SourceScrapeSkill](SourceScrapeSkill.md)                      | `Skills/SourceScrapeSkill/Run-SourceScrape.ps1`       |
-| INGEST | [IngestionSkill](IngestionSkill.md)                            | `Skills/IngestionSkill/Run-Ingestion.ps1`             |
-| REVIEW | [IngestionReviewSkill](IngestionReviewSkill.md)                | `Skills/IngestionReviewSkill/Run-IngestionReview.ps1` |
+| FETCH  | [SourceScrapeSkill](../SourceScrapeSkill/SKILL.md)                      | `Skills/SourceScrapeSkill/Run-SourceScrape.ps1`       |
+| INGEST | [IngestionSkill](../IngestionSkill/SKILL.md)                            | `Skills/IngestionSkill/Run-Ingestion.ps1`             |
+| REVIEW | [IngestionReviewSkill](../IngestionReviewSkill/SKILL.md)                | `Skills/IngestionReviewSkill/Run-IngestionReview.ps1` |
 
 All task state lives in `{{RAW_ROOT}}/<topic-slug>/`. State script `Skills/SharedScripts/research_state.py` is the single source of truth — read/write via its `status / mark / update / check-stop` commands rather than parsing files by hand.
 
@@ -84,7 +84,7 @@ Create `{{RAW_ROOT}}/<topic-slug>/` (slug = kebab-case topic):
 
 ### 3. Delegate candidate-list build to SourceScrapeSkill
 
-Invoke [SourceScrapeSkill](SourceScrapeSkill.md)'s **DISCOVER sub-protocol** synchronously. Pass it the inputs from `task.md`. It will:
+Invoke [SourceScrapeSkill](../SourceScrapeSkill/SKILL.md)'s **DISCOVER sub-protocol** synchronously. Pass it the inputs from `task.md`. It will:
 - Run WebSearch angle queries scaled by depth
 - Glob existing `{{RAW_ROOT}}/` files
 - Write ranked `candidates.md` in the documented entry format (`- [type] [title] — [url]` + `snippet:` + `status: pending`)
@@ -155,7 +155,7 @@ Valid phase progression: `FETCH` ⇄ `INGEST` → `REVIEW` → `COMPLETE`. (INGE
 
 Sub-skills (SourceScrapeSkill, IngestionSkill, IngestionReviewSkill) inherit these whenever they run with `Mode: WORKER`.
 
-**Universal rules** (no AskUserQuestion, no commits, STOP.md kill switch, ~80K context budget, hard context-pressure stop, no user-facing summaries) — see [SharedScripts/WORKER-rules.md](SharedScripts/WORKER-rules.md).
+**Universal rules** (no AskUserQuestion, no commits, STOP.md kill switch, ~80K context budget, hard context-pressure stop, no user-facing summaries) — see [SharedScripts/WORKER-rules.md](../SharedScripts/WORKER-rules.md).
 
 **Autoresearch-specific scope rules:**
 - **NEVER write outside `{{RAW_ROOT}}/<task-slug>/` or `{{WIKI_ROOT}}/`.**

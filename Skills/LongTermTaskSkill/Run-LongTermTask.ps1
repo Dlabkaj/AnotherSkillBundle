@@ -66,7 +66,7 @@ Task dir: $absTaskDir
 Partial: [$PartialIdx] $PartialSlug
 Partial dir: $absTaskDir\partial\$PartialIdx-$PartialSlug
 
-Follow Skills/LongTermTaskSkill.md WORKER protocol exactly. No user prompts. No commits.
+Follow Skills/LongTermTaskSkill/SKILL.md WORKER protocol exactly. No user prompts. No commits.
 "@
 }
 

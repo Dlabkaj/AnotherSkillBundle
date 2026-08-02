@@ -6,7 +6,7 @@ description: Standing wiki maintenance — structural lint (orphans, broken wiki
 
 # Librarian Skill
 
-Standing maintenance for a wiki tree. Owns **structural** checks; delegates the **factual** checklist to [IngestionReviewSkill](IngestionReviewSkill.md). Fixes structure in place; **flags** factual issues and escalates — never fabricates corroboration.
+Standing maintenance for a wiki tree. Owns **structural** checks; delegates the **factual** checklist to [IngestionReviewSkill](../IngestionReviewSkill/SKILL.md). Fixes structure in place; **flags** factual issues and escalates — never fabricates corroboration.
 
 > `{{WIKI_ROOT}}` and `{{RAW_ROOT}}` resolve from `skillSettings.json`. See repo `README.md`.
 
@@ -28,7 +28,7 @@ Fix items 3-4 structural gaps in place (add missing Index row, add missing heade
 
 ## Second-source audit (reuse, flag-only)
 
-Apply the [IngestionReviewSkill](IngestionReviewSkill.md) inline-mode checklist to the pages (deferred-verification atoms, single-source superlatives, conflicts, citation format). **Difference**: the Intern is haiku — it **flags** (`*(needs second source)*`, `⚠️ CONFLICT:`) and lists each in FLAGS-ESCALATED. It does NOT do the cross-check fix; that escalates to Researcher/Coordinator. Do not restate the checklist here — read it from IngestionReviewSkill.
+Apply the [IngestionReviewSkill](../IngestionReviewSkill/SKILL.md) inline-mode checklist to the pages (deferred-verification atoms, single-source superlatives, conflicts, citation format). **Difference**: the Intern is haiku — it **flags** (`*(needs second source)*`, `⚠️ CONFLICT:`) and lists each in FLAGS-ESCALATED. It does NOT do the cross-check fix; that escalates to Researcher/Coordinator. Do not restate the checklist here — read it from IngestionReviewSkill.
 
 ## Raw cleanup
 
@@ -52,5 +52,5 @@ CLEANED: <task dirs whose raw/ was removed, or none>
 
 ## Related
 
-- [IngestionReviewSkill](IngestionReviewSkill.md) — factual checklist this skill reuses
-- [AutoresearchSkill](AutoresearchSkill.md) — research pipeline that produces the wiki + raw tasks
+- [IngestionReviewSkill](../IngestionReviewSkill/SKILL.md) — factual checklist this skill reuses
+- [AutoresearchSkill](../AutoresearchSkill/SKILL.md) — research pipeline that produces the wiki + raw tasks

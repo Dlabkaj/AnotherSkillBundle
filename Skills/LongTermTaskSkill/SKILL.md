@@ -14,7 +14,7 @@ Architecture mirrors AutoresearchSkill: state files + state script + PowerShell 
 
 > `{{LONGTERM_ROOT}}` resolves from `skillSettings.json`. See repo `README.md`.
 
-**Reference docs loaded on demand:** file format schemas, full state-script API, background-runner internals, repeatable/one-of semantics, STOP.md, verification — see [LongTermTaskSkill/details.md](LongTermTaskSkill/details.md).
+**Reference docs loaded on demand:** file format schemas, full state-script API, background-runner internals, repeatable/one-of semantics, STOP.md, verification — see [details.md](details.md).
 
 ---
 
@@ -78,7 +78,7 @@ When user triggers a new LTT:
 Detect: prompt contains `Mode: WORKER` AND `Partial: [<idx>] <slug>` AND `Task dir: <path>`.
 
 Hard rules:
-- **Universal WORKER rules** — see [SharedScripts/WORKER-rules.md](SharedScripts/WORKER-rules.md): no AskUserQuestion, no commits, STOP.md kill switch, ~80K context budget, no user-facing summaries.
+- **Universal WORKER rules** — see [SharedScripts/WORKER-rules.md](../SharedScripts/WORKER-rules.md): no AskUserQuestion, no commits, STOP.md kill switch, ~80K context budget, no user-facing summaries.
 - **LTT-specific scope**: stay in the partial dir + steps targets. No skill chaining outside the task dir / wiki.
 
 Execution:

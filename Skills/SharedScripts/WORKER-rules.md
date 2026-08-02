@@ -3,8 +3,8 @@
 Universal hard rules for any skill running in `Mode: WORKER` (invoked by a runner via `claude -p`, not by a human at the keyboard). Skill-specific scope/format rules stay in the parent skill file.
 
 Cited by:
-- [AutoresearchSkill.md](../AutoresearchSkill.md) (+ SourceScrapeSkill / IngestionSkill / IngestionReviewSkill, which inherit)
-- [LongTermTaskSkill.md](../LongTermTaskSkill.md)
+- [AutoresearchSkill](../AutoresearchSkill/SKILL.md) (+ SourceScrapeSkill / IngestionSkill / IngestionReviewSkill, which inherit)
+- [LongTermTaskSkill](../LongTermTaskSkill/SKILL.md)
 
 ---
 
